@@ -29,7 +29,16 @@ export class SonosVolumeDial extends SingletonAction {
 			logger.debug('Initializing with settings:', { speakerIp, value, volumeStep });
 
 			// Initialize display with current or default value
-			dialAction.setFeedback({ value, indicator: { value } });
+			dialAction.setFeedback({ 
+        value: {
+          value,
+          opacity: this.isMuted ? 0.5 : 1.0
+        },
+				indicator: { 
+					value,
+					opacity: this.isMuted ? 0.5 : 1.0
+				},
+			});
 			dialAction.setSettings({ value, volumeStep, speakerIp });
 
 			// If we have a speaker IP, initialize the connection and update volume
@@ -50,9 +59,16 @@ export class SonosVolumeDial extends SingletonAction {
 					
 					// Update UI with current state
 					dialAction.setFeedback({ 
-						value: volume, 
-						indicator: { value: volume }
+						value: {
+              value: volume,
+              opacity: isMuted ? 0.5 : 1.0,
+            },
+						indicator: { 
+							value: volume,
+							opacity: isMuted ? 0.5 : 1.0
+						}
 					});
+					dialAction.setImage(isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 					dialAction.setSettings({ ...ev.payload.settings, value: volume });
 				} catch (error) {
 					logger.error('Failed to get speaker state:', {
@@ -96,8 +112,14 @@ export class SonosVolumeDial extends SingletonAction {
 
 			// Always update the display immediately for responsiveness
 			dialAction.setFeedback({ 
-				value: newValue, 
-				indicator: { value: newValue }
+				value: {
+          value: newValue,
+          opacity: this.isMuted ? 0.5 : 1.0,
+        },
+				indicator: { 
+					value: newValue,
+					opacity: this.isMuted ? 0.5 : 1.0
+				}
 			});
 			dialAction.setSettings({ ...ev.payload.settings, value: newValue });
 			this.lastKnownVolume = newValue;
@@ -128,9 +150,16 @@ export class SonosVolumeDial extends SingletonAction {
 						
 						// Update UI to reflect unmuted state
 						dialAction.setFeedback({ 
-							value: newValue, 
-							indicator: { value: newValue }
+							value: {
+                value: newValue,
+                opacity: this.isMuted ? 0.5 : 1.0,
+              },
+							indicator: { 
+								value: newValue,
+								opacity: this.isMuted ? 0.5 : 1.0
+							}
 						});
+						dialAction.setImage("imgs/actions/speaker.wave.3");
 					}
 
 					logger.debug('Setting volume:', newValue);
@@ -205,9 +234,16 @@ export class SonosVolumeDial extends SingletonAction {
 
 					// Update UI to reflect mute state
 					dialAction.setFeedback({ 
-						value: this.lastKnownVolume, 
-						indicator: { value: this.lastKnownVolume }
+						value: {
+              value: this.lastKnownVolume,
+              opacity: this.isMuted ? 0.5 : 1.0,
+            },
+						indicator: { 
+							value: this.lastKnownVolume,
+							opacity: this.isMuted ? 0.5 : 1.0
+						}
 					});
+					dialAction.setImage(this.isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 				} catch (error) {
 					logger.error('Mute toggle failed:', {
 						error: error instanceof Error ? error.message : String(error),
@@ -266,9 +302,16 @@ export class SonosVolumeDial extends SingletonAction {
 
 					// Update UI to reflect mute state
 					dialAction.setFeedback({ 
-						value: this.lastKnownVolume, 
-						indicator: { value: this.lastKnownVolume }
+						value: {
+              value: this.lastKnownVolume,
+              opacity: this.isMuted ? 0.5 : 1.0,
+            },
+						indicator: { 
+							value: this.lastKnownVolume,
+							opacity: this.isMuted ? 0.5 : 1.0
+						}
 					});
+					dialAction.setImage(this.isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 				} catch (error) {
 					logger.error('Mute toggle failed:', {
 						error: error instanceof Error ? error.message : String(error),

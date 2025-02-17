@@ -7,7 +7,7 @@
 		{
 			"Name": "Adjust Volume",
 			"UUID": "com.0xjessel.sonosvolumedial.volume",
-			"Icon": "imgs/actions/sonosvolumedial/speaker",
+			"Icon": "imgs/actions/speaker.wave.3",
 			"Tooltip": "Control a Sonos speaker volume using the dial",
 			"PropertyInspectorPath": "ui/volume-control.html",
 			"Controllers": [
@@ -18,23 +18,24 @@
 				"TriggerDescription": {
 					"Rotate": "Adjust Volume",
 					"Push": "Mute/Unmute",
-					"Touch": "Show Volume"
+					"Touch": "Mute/Unmute"
 				}
 			},
 			"States": [
 				{
-					"Image": "imgs/actions/speaker/key",
-					"TitleAlignment": "middle",
-					"FontSize": "16"
+					"Image": "imgs/actions/speaker.wave.3"
+				},
+				{
+					"Image": "imgs/actions/speaker.slash"
 				}
 			]
 		}
 	],
 	"Category": "Sonos Volume Dial",
-	"CategoryIcon": "imgs/plugin/speaker",
+	"CategoryIcon": "imgs/actions/speaker.wave.3",
 	"CodePath": "bin/plugin.js",
 	"Description": "Control your Sonos speaker via the Stream Deck+ dial",
-	"Icon": "imgs/plugin/speaker",
+	"Icon": "imgs/actions/speaker.wave.3",
 	"SDKVersion": 2,
 	"Software": {
 		"MinimumVersion": "6.4"
