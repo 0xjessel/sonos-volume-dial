@@ -1,11 +1,14 @@
-import streamDeck, { LogLevel } from "@elgato/streamdeck";
-import { SonosVolumeControl } from "./actions/sonos-volume";
+import streamDeck, { LogLevel } from '@elgato/streamdeck';
 
-// Enable trace logging for development
-streamDeck.logger.setLevel(LogLevel.TRACE);
+import { SonosVolumeDial } from './actions/sonos-volume-dial';
 
-// Register the Sonos volume control action
-streamDeck.actions.registerAction(new SonosVolumeControl());
+// Set up logging with DEBUG level for development
+streamDeck.logger.setLevel(LogLevel.DEBUG);
+const logger = streamDeck.logger.createScope('SonosPlugin');
+logger.info('Sonos Volume Dial plugin starting...');
 
-// Connect to Stream Deck
+// Register the actions.
+streamDeck.actions.registerAction(new SonosVolumeDial());
+
+// Finally, connect to the Stream Deck.
 streamDeck.connect();

@@ -1,0 +1,8 @@
+{
+  "name": "sonos-volume-dial-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "sonos": "^1.14.1"
+  }
+} 
