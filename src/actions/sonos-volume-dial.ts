@@ -1,4 +1,4 @@
-import { action, DialAction, DialRotateEvent, SingletonAction, WillAppearEvent } from '@elgato/streamdeck';
+import { action, DialAction, DialRotateEvent, SingletonAction, WillAppearEvent, DialUpEvent, TouchTapEvent } from '@elgato/streamdeck';
 import streamDeck from '@elgato/streamdeck';
 import { Sonos } from 'sonos';
 
@@ -9,6 +9,7 @@ import { Sonos } from 'sonos';
 export class SonosVolumeDial extends SingletonAction {
 	private sonos: Sonos | null = null;
 	private lastKnownVolume: number = 50;
+	private isMuted: boolean = false;
 	private logger = streamDeck.logger.createScope('SonosVolumeDial');
 
 	/**
@@ -37,13 +38,24 @@ export class SonosVolumeDial extends SingletonAction {
 				this.sonos = new Sonos(speakerIp);
 				
 				try {
-					const volume = await this.sonos.getVolume();
-					logger.debug('Got current volume:', volume);
+					// Get current volume and mute state
+					const [volume, isMuted] = await Promise.all([
+						this.sonos.getVolume(),
+						this.sonos.getMuted()
+					]);
+					
+					logger.debug('Got current state:', { volume, isMuted });
 					this.lastKnownVolume = volume;
-					dialAction.setFeedback({ value: volume, indicator: { value: volume } });
+					this.isMuted = isMuted;
+					
+					// Update UI with current state
+					dialAction.setFeedback({ 
+						value: volume, 
+						indicator: { value: volume }
+					});
 					dialAction.setSettings({ ...ev.payload.settings, value: volume });
 				} catch (error) {
-					logger.error('Failed to get volume:', {
+					logger.error('Failed to get speaker state:', {
 						error: error instanceof Error ? error.message : String(error),
 						stack: error instanceof Error ? error.stack : undefined
 					});
@@ -83,7 +95,10 @@ export class SonosVolumeDial extends SingletonAction {
 			});
 
 			// Always update the display immediately for responsiveness
-			dialAction.setFeedback({ value: newValue, indicator: { value: newValue } });
+			dialAction.setFeedback({ 
+				value: newValue, 
+				indicator: { value: newValue }
+			});
 			dialAction.setSettings({ ...ev.payload.settings, value: newValue });
 			this.lastKnownVolume = newValue;
 
@@ -96,6 +111,28 @@ export class SonosVolumeDial extends SingletonAction {
 				}
 
 				try {
+					// If speaker is muted, unmute it first and verify
+					if (this.isMuted) {
+						logger.debug('Unmuting speaker before volume change');
+						await this.sonos.setMuted(false);
+						
+						// Verify unmute was successful
+						const isMuted = await this.sonos.getMuted();
+						if (isMuted) {
+							logger.error('Failed to unmute speaker');
+							return;
+						}
+						
+						logger.debug('Speaker unmuted successfully');
+						this.isMuted = false;
+						
+						// Update UI to reflect unmuted state
+						dialAction.setFeedback({ 
+							value: newValue, 
+							indicator: { value: newValue }
+						});
+					}
+
 					logger.debug('Setting volume:', newValue);
 					await this.sonos.setVolume(newValue);
 					logger.debug('Volume set successfully');
@@ -122,6 +159,128 @@ export class SonosVolumeDial extends SingletonAction {
 			}
 		} catch (error) {
 			logger.error('Error in onDialRotate:', {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined
+			});
+		}
+	}
+
+	/**
+	 * Toggle mute state when the dial is pressed.
+	 */
+	override async onDialUp(ev: DialUpEvent<SonosVolumeDialSettings>): Promise<void> {
+		// Create a scoped logger for this specific press event
+		const logger = this.logger.createScope('DialUp');
+		
+		try {
+			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
+			const { speakerIp } = ev.payload.settings;
+
+			// If we have a speaker IP, toggle mute state
+			if (speakerIp) {
+				// Initialize connection if needed
+				if (!this.sonos) {
+					logger.info('Reconnecting to speaker:', speakerIp);
+					this.sonos = new Sonos(speakerIp);
+				}
+
+				try {
+					// Toggle mute state
+					this.isMuted = !this.isMuted;
+					logger.debug('Setting mute state:', this.isMuted);
+					await this.sonos.setMuted(this.isMuted);
+					logger.debug('Mute state set successfully');
+
+					// Verify the mute state was set correctly
+					const actualMuted = await this.sonos.getMuted();
+					if (actualMuted !== this.isMuted) {
+						logger.warn('Mute state mismatch:', {
+							expected: this.isMuted,
+							actual: actualMuted
+						});
+						this.isMuted = actualMuted;
+					} else {
+						logger.debug('Mute state verified:', actualMuted);
+					}
+
+					// Update UI to reflect mute state
+					dialAction.setFeedback({ 
+						value: this.lastKnownVolume, 
+						indicator: { value: this.lastKnownVolume }
+					});
+				} catch (error) {
+					logger.error('Mute toggle failed:', {
+						error: error instanceof Error ? error.message : String(error),
+						stack: error instanceof Error ? error.stack : undefined
+					});
+					this.sonos = null;
+				}
+			} else {
+				logger.warn('No speaker IP configured');
+			}
+		} catch (error) {
+			logger.error('Error in onDialUp:', {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined
+			});
+		}
+	}
+
+	/**
+	 * Toggle mute state when the dial face is tapped.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<SonosVolumeDialSettings>): Promise<void> {
+		// Create a scoped logger for this specific tap event
+		const logger = this.logger.createScope('TouchTap');
+		
+		try {
+			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
+			const { speakerIp } = ev.payload.settings;
+
+			// If we have a speaker IP, toggle mute state
+			if (speakerIp) {
+				// Initialize connection if needed
+				if (!this.sonos) {
+					logger.info('Reconnecting to speaker:', speakerIp);
+					this.sonos = new Sonos(speakerIp);
+				}
+
+				try {
+					// Toggle mute state
+					this.isMuted = !this.isMuted;
+					logger.debug('Setting mute state:', this.isMuted);
+					await this.sonos.setMuted(this.isMuted);
+					logger.debug('Mute state set successfully');
+
+					// Verify the mute state was set correctly
+					const actualMuted = await this.sonos.getMuted();
+					if (actualMuted !== this.isMuted) {
+						logger.warn('Mute state mismatch:', {
+							expected: this.isMuted,
+							actual: actualMuted
+						});
+						this.isMuted = actualMuted;
+					} else {
+						logger.debug('Mute state verified:', actualMuted);
+					}
+
+					// Update UI to reflect mute state
+					dialAction.setFeedback({ 
+						value: this.lastKnownVolume, 
+						indicator: { value: this.lastKnownVolume }
+					});
+				} catch (error) {
+					logger.error('Mute toggle failed:', {
+						error: error instanceof Error ? error.message : String(error),
+						stack: error instanceof Error ? error.stack : undefined
+					});
+					this.sonos = null;
+				}
+			} else {
+				logger.warn('No speaker IP configured');
+			}
+		} catch (error) {
+			logger.error('Error in onTouchTap:', {
 				error: error instanceof Error ? error.message : String(error),
 				stack: error instanceof Error ? error.stack : undefined
 			});
