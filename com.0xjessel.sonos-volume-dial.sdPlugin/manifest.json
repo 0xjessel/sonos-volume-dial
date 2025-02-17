@@ -1,0 +1,57 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"UUID": "com.0xjessel.sonos-volume-dial",
+	"Name": "Sonos Volume Dial",
+	"Version": "0.1.0.0",
+	"Author": "0xjessel",
+	"Actions": [
+		{
+			"Name": "Sonos Volume",
+			"UUID": "com.0xjessel.sonos-volume-dial.volume",
+			"Icon": "imgs/actions/volume/icon",
+			"Tooltip": "Control Sonos speaker volume using the dial.",
+			"PropertyInspectorPath": "ui/volume-control.html",
+			"Controllers": [
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "$B1",
+				"TriggerDescription": {
+					"Rotate": "Adjust Volume",
+					"Push": "Mute/Unmute",
+					"Touch": "Show Volume"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/actions/volume/key",
+					"TitleAlignment": "middle",
+					"FontSize": "16"
+				}
+			]
+		}
+	],
+	"Category": "Sonos Volume Dial",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Control your Sonos speaker via the Stream Deck+ dial",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.4"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	}
+}

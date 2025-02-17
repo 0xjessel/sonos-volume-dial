@@ -1,0 +1,59 @@
+.sdpi-wrapper {
+    padding: 8px;
+}
+
+.sdpi-item {
+    display: flex;
+    padding: 6px;
+    align-items: center;
+}
+
+.sdpi-item-label {
+    width: 94px;
+    padding-right: 8px;
+    font-weight: normal;
+    font-size: 12px;
+}
+
+.sdpi-item-value {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0 4px;
+    font-size: 12px;
+}
+
+input.sdpi-item-value {
+    height: 28px;
+    padding: 0 4px;
+    border: 1px solid #969696;
+    border-radius: 4px;
+    background-color: #2D2D2D;
+    color: #969696;
+}
+
+select.sdpi-item-value {
+    height: 28px;
+    border: 1px solid #969696;
+    border-radius: 4px;
+    background-color: #2D2D2D;
+    color: #969696;
+}
+
+button.sdpi-item-value {
+    margin-left: 8px;
+    padding: 4px 10px;
+    border: 1px solid #969696;
+    border-radius: 4px;
+    background-color: #2D2D2D;
+    color: #969696;
+    cursor: pointer;
+}
+
+button.sdpi-item-value:hover {
+    background-color: #3D3D3D;
+}
+
+button.sdpi-item-value:active {
+    background-color: #4D4D4D;
+} 

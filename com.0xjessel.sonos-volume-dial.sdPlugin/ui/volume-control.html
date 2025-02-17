@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Sonos Volume Control Settings</title>
+    <link rel="stylesheet" href="../libs/css/sdpi.css">
+    <style>
+        .error {
+            color: red;
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+        .success {
+            color: green;
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+        .loading {
+            display: none;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sdpi-wrapper">
+        <!-- IP Address Input -->
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Speaker IP</div>
+            <input class="sdpi-item-value" type="text" id="speakerIp" placeholder="192.168.1.100">
+            <button class="sdpi-item-value" id="validateIp">Test Connection</button>
+            <span class="loading" id="testLoading">Testing...</span>
+        </div>
+        <div class="error" id="ipError">Invalid IP address format</div>
+        <div class="success" id="ipSuccess">Valid IP format</div>
+
+        <!-- Volume Step Configuration -->
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Volume Step (%)</div>
+            <select class="sdpi-item-value select" id="volumeStep">
+                <option value="1">1%</option>
+                <option value="2" selected>2%</option>
+                <option value="5">5%</option>
+                <option value="10">10%</option>
+            </select>
+        </div>
+
+        <!-- Status Display -->
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Status</div>
+            <div class="sdpi-item-value" id="status">Not Connected</div>
+        </div>
+    </div>
+
+    <!-- Stream Deck Property Inspector Library -->
+    <script src="../libs/js/property-inspector.js"></script>
+
+    <script>
+        console.log('Property Inspector script starting...');
+
+        // Load Stream Deck library
+        let websocket = null;
+        let pluginAction = null;
+        let currentSettings = {};
+
+        // Connect to Stream Deck
+        window.connectElgatoStreamDeckSocket = function(inPort, inPluginUUID, inRegisterEvent, inInfo) {
+            console.log('Connecting to Stream Deck with raw params:', {
+                port: inPort,
+                uuid: inPluginUUID,
+                registerEvent: inRegisterEvent,
+                info: inInfo
+            });
+            
+            const info = JSON.parse(inInfo);
+            console.log('Full parsed info object:', JSON.stringify(info, null, 2));
+            
+            // Use the plugin UUID as the context for property inspector
+            pluginAction = inPluginUUID;
+            console.log('Using plugin UUID as context:', pluginAction);
+            
+            websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+            websocket.onopen = function() {
+                console.log('WebSocket connected, registering plugin...');
+                
+                // Register plugin with Stream Deck
+                const registerEvent = {
+                    event: inRegisterEvent,
+                    uuid: inPluginUUID
+                };
+                console.log('Sending register event:', registerEvent);
+                websocket.send(JSON.stringify(registerEvent));
+
+                // Request current settings
+                const getSettingsEvent = {
+                    event: "getSettings",
+                    context: pluginAction
+                };
+                console.log('Requesting settings with full event:', getSettingsEvent);
+                websocket.send(JSON.stringify(getSettingsEvent));
+            };
+
+            websocket.onmessage = function(evt) {
+                console.log('Raw WebSocket message:', evt.data);
+                
+                const jsonObj = JSON.parse(evt.data);
+                const { event, payload } = jsonObj;
+
+                console.log(`Received event: ${event}`, payload);
+
+                if (event === "didReceiveSettings") {
+                    console.log('Settings received:', payload.settings);
+                    const settings = payload.settings;
+                    currentSettings = settings;
+                    
+                    // Update UI with current settings
+                    updateUI(settings);
+                }
+                else if (event === "sendToPropertyInspector") {
+                    console.log('Message from plugin:', payload);
+                    handlePluginMessage(payload);
+                }
+            };
+
+            websocket.onerror = function(evt) {
+                console.error('WebSocket error:', evt);
+            };
+
+            websocket.onclose = function(evt) {
+                console.log('WebSocket closed:', evt);
+            };
+        }
+
+        // Update UI with settings
+        function updateUI(settings) {
+            console.log('Updating UI with settings:', settings);
+            
+            // Update IP address input
+            const ipInput = document.getElementById("speakerIp");
+            if (settings.speakerIp !== undefined) {
+                console.log('Setting IP input to:', settings.speakerIp);
+                ipInput.value = settings.speakerIp;
+            }
+
+            // Update volume step select
+            const stepSelect = document.getElementById("volumeStep");
+            if (settings.volumeStep !== undefined) {
+                console.log('Setting volume step to:', settings.volumeStep);
+                stepSelect.value = settings.volumeStep.toString();
+            }
+
+            // Update status
+            const statusDiv = document.getElementById("status");
+            if (settings.speakerIp) {
+                statusDiv.textContent = "IP Set: " + settings.speakerIp;
+            } else {
+                statusDiv.textContent = "No IP Set";
+            }
+        }
+
+        // Handle messages from the plugin
+        function handlePluginMessage(payload) {
+            const loadingSpan = document.getElementById("testLoading");
+            const errorDiv = document.getElementById("ipError");
+            const successDiv = document.getElementById("ipSuccess");
+            const statusDiv = document.getElementById("status");
+
+            loadingSpan.style.display = "none";
+
+            if (payload.type === "ipValidation") {
+                errorDiv.style.display = payload.isValid ? "none" : "block";
+                successDiv.style.display = payload.isValid ? "block" : "none";
+                statusDiv.textContent = payload.message;
+            }
+        }
+
+        // Save settings when inputs change
+        function saveSettings() {
+            if (!websocket) return;
+
+            const speakerIp = document.getElementById("speakerIp").value;
+            const volumeStep = parseInt(document.getElementById("volumeStep").value);
+
+            console.log('Saving new settings - IP:', speakerIp, 'Step:', volumeStep);
+
+            // Merge with current settings to preserve other values
+            const settings = {
+                ...currentSettings,
+                speakerIp,
+                volumeStep
+            };
+
+            // Update our local copy
+            currentSettings = settings;
+
+            // Send to Stream Deck
+            websocket.send(JSON.stringify({
+                event: "setSettings",
+                context: pluginAction,
+                payload: settings
+            }));
+
+            // Update status
+            const statusDiv = document.getElementById("status");
+            statusDiv.textContent = speakerIp ? "IP Set: " + speakerIp : "No IP Set";
+        }
+
+        // Test IP connection
+        async function testConnection() {
+            const ipInput = document.getElementById("speakerIp");
+            const loadingSpan = document.getElementById("testLoading");
+            const errorDiv = document.getElementById("ipError");
+            const successDiv = document.getElementById("ipSuccess");
+            const statusDiv = document.getElementById("status");
+
+            loadingSpan.style.display = "inline";
+            errorDiv.style.display = "none";
+            successDiv.style.display = "none";
+            statusDiv.textContent = "Testing connection...";
+            
+            // Send test request to plugin
+            websocket.send(JSON.stringify({
+                event: "sendToPlugin",
+                context: pluginAction,
+                payload: {
+                    type: "validateIp",
+                    ip: ipInput.value
+                }
+            }));
+        }
+
+        // Add event listeners
+        document.getElementById("speakerIp").addEventListener("input", saveSettings);  // Save while typing
+        document.getElementById("speakerIp").addEventListener("change", saveSettings); // Also keep change event for good measure
+        document.getElementById("volumeStep").addEventListener("change", saveSettings);
+        document.getElementById("validateIp").addEventListener("click", testConnection);
+    </script>
+</body>
+</html> 
