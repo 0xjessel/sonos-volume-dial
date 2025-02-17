@@ -64,7 +64,6 @@ export class SonosVolumeDial extends SingletonAction {
 
 				// Only update if values have changed
 				if (volume !== this.lastKnownVolume || isMuted !== this.isMuted) {
-					logger.debug('Speaker state changed:', { volume, isMuted });
 					this.lastKnownVolume = volume;
 					this.isMuted = isMuted;
 
@@ -79,7 +78,6 @@ export class SonosVolumeDial extends SingletonAction {
 							opacity: isMuted ? 0.5 : 1.0
 						}
 					});
-					this.currentAction.setImage(isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 					this.currentAction.setSettings({ ...this.currentSettings, value: volume });
 				}
 			} catch (error) {
@@ -161,7 +159,6 @@ export class SonosVolumeDial extends SingletonAction {
 						this.sonos.getMuted()
 					]);
 					
-					logger.debug('Got current state:', { volume, isMuted });
 					this.lastKnownVolume = volume;
 					this.isMuted = isMuted;
 					
@@ -176,13 +173,12 @@ export class SonosVolumeDial extends SingletonAction {
 							opacity: isMuted ? 0.5 : 1.0
 						}
 					});
-					dialAction.setImage(isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 					dialAction.setSettings({ ...ev.payload.settings, value: volume });
 
 					// Start polling for updates
 					this.startPolling(dialAction);
 				} catch (error) {
-					logger.error('Failed to get speaker state:', {
+					logger.error('Failed to connect to speaker:', {
 						error: error instanceof Error ? error.message : String(error),
 						stack: error instanceof Error ? error.stack : undefined
 					});
@@ -217,13 +213,6 @@ export class SonosVolumeDial extends SingletonAction {
 
 			// Calculate new value using the volumeStep setting
 			const newValue = Math.max(0, Math.min(100, value + (ticks * volumeStep)));
-			logger.debug('Processing rotation:', { 
-				currentValue: value,
-				ticks,
-				volumeStep,
-				newValue,
-				speakerIp
-			});
 
 			// Always update the display immediately for responsiveness
 			dialAction.setFeedback({ 
@@ -254,7 +243,6 @@ export class SonosVolumeDial extends SingletonAction {
 				try {
 					// If speaker is muted, unmute it first and verify
 					if (this.isMuted) {
-						logger.debug('Unmuting speaker before volume change');
 						await this.sonos.setMuted(false);
 						
 						// Verify unmute was successful
@@ -264,7 +252,6 @@ export class SonosVolumeDial extends SingletonAction {
 							return;
 						}
 						
-						logger.debug('Speaker unmuted successfully');
 						this.isMuted = false;
 						
 						// Update UI to reflect unmuted state
@@ -281,9 +268,7 @@ export class SonosVolumeDial extends SingletonAction {
 						dialAction.setImage("imgs/actions/speaker.wave.3");
 					}
 
-					logger.debug('Setting volume:', newValue);
 					await this.sonos.setVolume(newValue);
-					logger.debug('Volume set successfully');
 
 					// Verify the volume was set correctly
 					const actualVolume = await this.sonos.getVolume();
@@ -292,16 +277,13 @@ export class SonosVolumeDial extends SingletonAction {
 							expected: newValue,
 							actual: actualVolume
 						});
-					} else {
-						logger.debug('Volume verified:', actualVolume);
 					}
 				} catch (error) {
-					logger.error('Volume update failed:', {
+					logger.error('Failed to update volume:', {
 						error: error instanceof Error ? error.message : String(error),
 						stack: error instanceof Error ? error.stack : undefined
 					});
 					this.sonos = null;
-					// Don't stop polling, it will try to reconnect on next poll
 				}
 			} else {
 				logger.warn('No speaker IP configured');
@@ -340,9 +322,7 @@ export class SonosVolumeDial extends SingletonAction {
 				try {
 					// Toggle mute state
 					this.isMuted = !this.isMuted;
-					logger.debug('Setting mute state:', this.isMuted);
 					await this.sonos.setMuted(this.isMuted);
-					logger.debug('Mute state set successfully');
 
 					// Verify the mute state was set correctly
 					const actualMuted = await this.sonos.getMuted();
@@ -352,8 +332,6 @@ export class SonosVolumeDial extends SingletonAction {
 							actual: actualMuted
 						});
 						this.isMuted = actualMuted;
-					} else {
-						logger.debug('Mute state verified:', actualMuted);
 					}
 
 					// Update UI to reflect mute state
@@ -367,9 +345,8 @@ export class SonosVolumeDial extends SingletonAction {
 							opacity: this.isMuted ? 0.5 : 1.0
 						}
 					});
-					dialAction.setImage(this.isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 				} catch (error) {
-					logger.error('Mute toggle failed:', {
+					logger.error('Failed to toggle mute:', {
 						error: error instanceof Error ? error.message : String(error),
 						stack: error instanceof Error ? error.stack : undefined
 					});
@@ -412,9 +389,7 @@ export class SonosVolumeDial extends SingletonAction {
 				try {
 					// Toggle mute state
 					this.isMuted = !this.isMuted;
-					logger.debug('Setting mute state:', this.isMuted);
 					await this.sonos.setMuted(this.isMuted);
-					logger.debug('Mute state set successfully');
 
 					// Verify the mute state was set correctly
 					const actualMuted = await this.sonos.getMuted();
@@ -424,8 +399,6 @@ export class SonosVolumeDial extends SingletonAction {
 							actual: actualMuted
 						});
 						this.isMuted = actualMuted;
-					} else {
-						logger.debug('Mute state verified:', actualMuted);
 					}
 
 					// Update UI to reflect mute state
@@ -439,9 +412,8 @@ export class SonosVolumeDial extends SingletonAction {
 							opacity: this.isMuted ? 0.5 : 1.0
 						}
 					});
-					dialAction.setImage(this.isMuted ? "imgs/actions/speaker.slash" : "imgs/actions/speaker.wave.3");
 				} catch (error) {
-					logger.error('Mute toggle failed:', {
+					logger.error('Failed to toggle mute:', {
 						error: error instanceof Error ? error.message : String(error),
 						stack: error instanceof Error ? error.stack : undefined
 					});

@@ -36,8 +36,6 @@
     <script src="../libs/js/property-inspector.js"></script>
 
     <script>
-        console.log('Property Inspector script starting...');
-
         // Load Stream Deck library
         let websocket = null;
         let pluginAction = null;
@@ -46,13 +44,11 @@
         function updateDebugOutput(message) {
             const debugOutput = document.getElementById("debugOutput");
             debugOutput.textContent = message;
-            console.log(message);
         }
 
         // Connect to Stream Deck
         window.connectElgatoStreamDeckSocket = function(inPort, inPluginUUID, inRegisterEvent, inInfo) {
             updateDebugOutput('Connecting to Stream Deck...');
-            console.log('Raw connection params:', { port: inPort, uuid: inPluginUUID, registerEvent: inRegisterEvent, info: inInfo });
             
             // Use the plugin UUID as the context for property inspector
             pluginAction = inPluginUUID;
@@ -67,7 +63,6 @@
                     event: inRegisterEvent,
                     uuid: inPluginUUID
                 };
-                console.log('Sending register event:', registerEvent);
                 websocket.send(JSON.stringify(registerEvent));
 
                 // Request current settings
@@ -75,20 +70,16 @@
                     event: "getSettings",
                     context: pluginAction
                 };
-                console.log('Requesting settings:', getSettingsEvent);
                 websocket.send(JSON.stringify(getSettingsEvent));
             };
 
             websocket.onmessage = function(evt) {
-                console.log('Raw WebSocket message:', evt.data);
-                
                 const jsonObj = JSON.parse(evt.data);
                 const { event, payload } = jsonObj;
 
                 updateDebugOutput(`Received event: ${event}`);
 
                 if (event === "didReceiveSettings") {
-                    console.log('Settings received:', payload.settings);
                     currentSettings = payload.settings;
                     updateUI(payload.settings);
                 }
@@ -99,8 +90,7 @@
                 updateDebugOutput('WebSocket Error');
             };
 
-            websocket.onclose = function(evt) {
-                console.log('WebSocket closed:', evt);
+            websocket.onclose = function() {
                 updateDebugOutput('WebSocket Closed');
             };
         }
