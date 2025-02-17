@@ -5,7 +5,7 @@ import { Sonos } from 'sonos';
 /**
  * Sonos Volume Dial action that controls a Sonos speaker's volume.
  */
-@action({ UUID: 'com.0xjessel.sonosvolumedial.volume' })
+@action({ UUID: 'com.0xjessel.sonos-volume-dial.volume' })
 export class SonosVolumeDial extends SingletonAction {
 	private sonos: Sonos | null = null;
 	private lastKnownVolume: number = 50;

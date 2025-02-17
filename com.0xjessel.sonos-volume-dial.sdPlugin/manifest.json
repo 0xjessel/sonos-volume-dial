@@ -1,12 +1,13 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"UUID": "com.0xjessel.sonos-volume-dial",
 	"Name": "Sonos Volume Dial",
 	"Version": "0.1.0.0",
 	"Author": "0xjessel",
 	"Actions": [
 		{
 			"Name": "Adjust Volume",
-			"UUID": "com.0xjessel.sonosvolumedial.volume",
+			"UUID": "com.0xjessel.sonos-volume-dial.volume",
 			"Icon": "imgs/actions/speaker.wave.3",
 			"Tooltip": "Control a Sonos speaker volume using the dial",
 			"PropertyInspectorPath": "ui/volume-control.html",
