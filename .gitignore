@@ -1,6 +1,23 @@
 # Node.js
 node_modules/
+npm-debug.log*
 
-# Stream Deck files
+# Build artifacts
 *.sdPlugin/bin
 *.sdPlugin/logs
+*.streamDeckPlugin
+
+# Development files
+.DS_Store
+.env
+.env.local
+.env.*
+*.log
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+*.sublime-workspace
+*.sublime-project
