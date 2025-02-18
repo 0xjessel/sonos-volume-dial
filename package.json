@@ -1,6 +1,6 @@
 {
     "name": "sonos-volume-dial",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Control your Sonos speaker via the Stream Deck+ dial",
     "author": "0xjessel",
     "license": "MIT",
