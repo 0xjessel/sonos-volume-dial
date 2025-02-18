@@ -2,7 +2,7 @@
 
 A Stream Deck+ plugin that lets you control your Sonos speaker's volume using the Stream Deck+ dial. Seamlessly adjust volume, mute/unmute, and get real-time feedback directly on your Stream Deck+.
 
-![Stream Deck+ Sonos Volume Control](com.0xjessel.sonos-volume-dial.sdPlugin/imgs/plugin/marketplace.png)
+![Stream Deck+ Sonos Volume Control](com.0xjessel.sonos-volume-dial.sdPlugin/imgs/actions/speaker.wave.3@2x.png)
 
 ## Features
 
@@ -80,3 +80,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built using the [Elgato Stream Deck SDK](https://developer.elgato.com/documentation/stream-deck/)
 - Uses [sonos](https://github.com/bencevans/node-sonos) for Sonos control
 - Icons adapted from SF Symbols
+- Written entirely using [Cursor](https://cursor.sh/) and Claude-3.5-Sonnet
