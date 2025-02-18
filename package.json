@@ -1,4 +1,13 @@
 {
+    "name": "sonos-volume-dial",
+    "version": "1.0.0",
+    "description": "Control your Sonos speaker via the Stream Deck+ dial",
+    "author": "0xjessel",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/0xjessel/sonos-volume-dial"
+    },
     "scripts": {
         "build": "rollup -c",
         "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.0xjessel.sonos-volume-dial\""
@@ -19,6 +28,6 @@
     },
     "dependencies": {
         "@elgato/streamdeck": "^1.3.0",
-        "node-sonos": "^0.12.6"
+        "sonos": "^1.14.1"
     }
 }

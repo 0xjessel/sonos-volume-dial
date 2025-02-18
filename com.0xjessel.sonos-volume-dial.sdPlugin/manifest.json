@@ -2,7 +2,7 @@
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"UUID": "com.0xjessel.sonos-volume-dial",
 	"Name": "Sonos Volume Dial",
-	"Version": "0.1.0.0",
+	"Version": "1.0.0.0",
 	"Author": "0xjessel",
 	"Actions": [
 		{
@@ -33,7 +33,7 @@
 	"CategoryIcon": "imgs/actions/speaker.wave.3",
 	"CodePath": "bin/plugin.js",
 	"Description": "Control your Sonos speaker via the Stream Deck+ dial",
-	"Icon": "imgs/actions/speaker.wave.3",
+	"Icon": "imgs/plugin/icon",
 	"SDKVersion": 2,
 	"Software": {
 		"MinimumVersion": "6.4"
@@ -50,6 +50,6 @@
 	],
 	"Nodejs": {
 		"Version": "20",
-		"Debug": "enabled"
+		"Debug": "disabled"
 	}
 }
