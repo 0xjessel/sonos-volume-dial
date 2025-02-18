@@ -4,6 +4,63 @@
     <title>Sonos Volume Control Settings</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../libs/css/sdpi.css">
+    <style>
+        /* Make labels white */
+        .sdpi-item-label {
+            color: white;
+        }
+
+        /* Make input text white */
+        .sdpi-item-value {
+            color: white !important;
+        }
+
+        /* Make select options white on dark background */
+        select.sdpi-item-value option {
+            background-color: #2D2D2D;
+            color: white;
+        }
+
+        /* Ensure input placeholder text is slightly dimmed */
+        .sdpi-item-value::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Error message styling */
+        .error {
+            color: #f44336;
+        }
+
+        /* Invalid input styling */
+        .invalid {
+            border-color: #f44336 !important;
+            border-width: 1px;
+        }
+
+        /* Info tooltip styling */
+        .info-tooltip {
+            font-size: 12px;
+            color: #999;
+            display: block;
+            clear: both;
+        }
+
+        /* Validation message styling */
+        .validation-message {
+            font-size: 12px;
+            color: #f44336;
+            display: none;
+            width: 100%;
+            clear: both;
+            margin: 4px 0;
+            padding-left: 96px;
+        }
+
+        /* Ensure input text is white */
+        input.sdpi-item-value, select.sdpi-item-value {
+            color: white !important;
+        }
+    </style>
 </head>
 
 <body>
@@ -11,7 +68,11 @@
         <!-- IP Address Input -->
         <div class="sdpi-item">
             <div class="sdpi-item-label">Speaker IP</div>
-            <input class="sdpi-item-value" type="text" id="speakerIp" setting="speakerIp" placeholder="192.168.1.100">
+            <input class="sdpi-item-value" type="text" id="speakerIp" setting="speakerIp" placeholder="192.168.1.100" pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+        </div>
+        <div class="validation-message" id="ipValidationMessage">Please enter a valid IP address (e.g., 192.168.1.100)</div>
+        <div class="sdpi-item">
+            <div class="spdi-item-value info-tooltip">Go to your Sonos mobile app > Settings > General Settings > About Your System > Sonos System Info and find your speaker's IP address</div>
         </div>
 
         <!-- Volume Step Configuration -->
@@ -24,12 +85,6 @@
                 <option value="10">10%</option>
             </select>
         </div>
-
-        <!-- Debug Output -->
-        <div class="sdpi-item">
-            <div class="sdpi-item-label">Status</div>
-            <div class="sdpi-item-value" id="debugOutput">Not Connected</div>
-        </div>
     </div>
 
     <!-- Stream Deck Property Inspector Library -->
@@ -41,23 +96,33 @@
         let pluginAction = null;
         let currentSettings = {};
 
-        function updateDebugOutput(message) {
-            const debugOutput = document.getElementById("debugOutput");
-            debugOutput.textContent = message;
+        function validateIPAddress(ip) {
+            // Regular expression for IP address validation
+            const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            return ipRegex.test(ip);
+        }
+
+        function showValidationMessage(show) {
+            const message = document.getElementById('ipValidationMessage');
+            const input = document.getElementById('speakerIp');
+            
+            if (show) {
+                message.style.display = 'block';
+                input.classList.add('invalid');
+            } else {
+                message.style.display = 'none';
+                input.classList.remove('invalid');
+            }
         }
 
         // Connect to Stream Deck
         window.connectElgatoStreamDeckSocket = function(inPort, inPluginUUID, inRegisterEvent, inInfo) {
-            updateDebugOutput('Connecting to Stream Deck...');
-            
             // Use the plugin UUID as the context for property inspector
             pluginAction = inPluginUUID;
             
             websocket = new WebSocket("ws://127.0.0.1:" + inPort);
 
             websocket.onopen = function() {
-                updateDebugOutput('WebSocket Connected');
-
                 // Register plugin with Stream Deck
                 const registerEvent = {
                     event: inRegisterEvent,
@@ -77,28 +142,15 @@
                 const jsonObj = JSON.parse(evt.data);
                 const { event, payload } = jsonObj;
 
-                updateDebugOutput(`Received event: ${event}`);
-
                 if (event === "didReceiveSettings") {
                     currentSettings = payload.settings;
                     updateUI(payload.settings);
                 }
             };
-
-            websocket.onerror = function(evt) {
-                console.error('WebSocket error:', evt);
-                updateDebugOutput('WebSocket Error');
-            };
-
-            websocket.onclose = function() {
-                updateDebugOutput('WebSocket Closed');
-            };
         }
 
         // Update UI with settings
         function updateUI(settings) {
-            updateDebugOutput('Updating UI with settings');
-            
             // Update IP address input
             const ipInput = document.getElementById("speakerIp");
             if (settings.speakerIp !== undefined) {
@@ -119,7 +171,13 @@
             const speakerIp = document.getElementById("speakerIp").value;
             const volumeStep = parseInt(document.getElementById("volumeStep").value);
 
-            updateDebugOutput('Saving settings...');
+            // Don't save if IP is invalid, but still show validation message
+            if (speakerIp && !validateIPAddress(speakerIp)) {
+                showValidationMessage(true);
+                return;
+            }
+
+            showValidationMessage(false);
 
             // Merge with current settings to preserve other values
             const settings = {
@@ -139,12 +197,23 @@
             }));
         }
 
-        // Add event listeners
-        document.getElementById("speakerIp").addEventListener("change", saveSettings);
-        document.getElementById("volumeStep").addEventListener("change", saveSettings);
+        // Validate IP address in real-time
+        function validateInput(e) {
+            const ip = e.target.value;
+            if (ip && !validateIPAddress(ip)) {
+                showValidationMessage(true);
+            } else {
+                showValidationMessage(false);
+            }
+        }
 
-        // Initial status update
-        updateDebugOutput('Property Inspector Loaded');
+        // Add event listeners
+        const speakerIpInput = document.getElementById("speakerIp");
+        speakerIpInput.addEventListener("input", (e) => {
+            validateInput(e);
+            saveSettings();
+        });
+        document.getElementById("volumeStep").addEventListener("change", saveSettings);
     </script>
 </body>
 </html> 

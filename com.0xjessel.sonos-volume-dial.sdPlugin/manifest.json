@@ -25,9 +25,6 @@
 			"States": [
 				{
 					"Image": "imgs/actions/speaker.wave.3"
-				},
-				{
-					"Image": "imgs/actions/speaker.slash"
 				}
 			]
 		}
