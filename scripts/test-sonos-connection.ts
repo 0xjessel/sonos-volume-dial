@@ -1,4 +1,4 @@
-const { Sonos } = require('sonos');
+import { Sonos } from 'sonos';
 
 async function testSonosConnection() {
     // Change this to your Sonos speaker's IP address

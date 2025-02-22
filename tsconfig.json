@@ -6,10 +6,12 @@
 		],
 		"module": "ES2022",
 		"moduleResolution": "Bundler",
-		"noImplicitOverride": true
+		"noImplicitOverride": true,
+		"noImplicitAny": false
 	},
 	"include": [
-		"src/**/*.ts"
+		"src/**/*.ts",
+		"scripts/**/*.ts"
 	],
 	"exclude": [
 		"node_modules"

@@ -10,7 +10,8 @@
     },
     "scripts": {
         "build": "rollup -c",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.0xjessel.sonos-volume-dial\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.0xjessel.sonos-volume-dial\"",
+        "test-sonos": "node --loader ts-node/esm scripts/test-sonos-connection.ts"
     },
     "type": "module",
     "devDependencies": {
