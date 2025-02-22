@@ -228,7 +228,21 @@ export class SonosVolumeDial extends SingletonAction {
 			// Calculate new value using the volumeStep setting
 			const newValue = Math.max(0, Math.min(100, value + (ticks * volumeStep)));
 
-			// If we have a speaker IP, update the speaker volume
+			// Update UI immediately for responsiveness
+			dialAction.setFeedback({ 
+				value: {
+					value: newValue,
+					opacity: this.isMuted ? 0.5 : 1.0,
+				},
+				indicator: { 
+					value: newValue,
+					opacity: this.isMuted ? 0.5 : 1.0
+				}
+			});
+			dialAction.setSettings({ ...this.currentSettings, value: newValue });
+			this.lastKnownVolume = newValue;
+
+			// If we have a speaker IP, update the speaker volume in the background
 			if (speakerIp) {
 				// Initialize connection if needed
 				if (!this.sonos) {
@@ -250,14 +264,15 @@ export class SonosVolumeDial extends SingletonAction {
 						if (isMuted) {
 							logger.error('Failed to unmute speaker');
 							this.showAlert(dialAction, 'Failed to unmute speaker');
-							// Reset UI to show error state
+							this.isMuted = true;
+							// Update UI to reflect muted state
 							dialAction.setFeedback({ 
 								value: {
-									value: 0,
+									value: newValue,
 									opacity: 0.5,
 								},
 								indicator: { 
-									value: 0,
+									value: newValue,
 									opacity: 0.5
 								}
 							});
@@ -277,34 +292,20 @@ export class SonosVolumeDial extends SingletonAction {
 							actual: actualVolume
 						});
 						this.showAlert(dialAction, 'Failed to set volume');
-						// Reset UI to show error state
+						// Update UI to reflect actual volume since it differs from our optimistic update
 						dialAction.setFeedback({ 
 							value: {
-								value: 0,
-								opacity: 0.5,
+								value: actualVolume,
+								opacity: this.isMuted ? 0.5 : 1.0,
 							},
 							indicator: { 
-								value: 0,
-								opacity: 0.5
+								value: actualVolume,
+								opacity: this.isMuted ? 0.5 : 1.0
 							}
 						});
-						return;
+						dialAction.setSettings({ ...this.currentSettings, value: actualVolume });
+						this.lastKnownVolume = actualVolume;
 					}
-
-					// Only update UI if all operations succeeded
-					dialAction.setFeedback({ 
-						value: {
-							value: newValue,
-							opacity: this.isMuted ? 0.5 : 1.0,
-						},
-						indicator: { 
-							value: newValue,
-							opacity: this.isMuted ? 0.5 : 1.0
-						}
-					});
-					dialAction.setSettings({ ...this.currentSettings, value: newValue });
-					this.lastKnownVolume = newValue;
-
 				} catch (error) {
 					logger.error('Failed to update volume:', {
 						error: error instanceof Error ? error.message : String(error),
@@ -312,32 +313,11 @@ export class SonosVolumeDial extends SingletonAction {
 					});
 					this.sonos = null;
 					this.showAlert(dialAction, 'Failed to update volume');
-					// Reset UI to show error state
-					dialAction.setFeedback({ 
-						value: {
-							value: 0,
-							opacity: 0.5,
-						},
-						indicator: { 
-							value: 0,
-							opacity: 0.5
-						}
-					});
+					// Keep optimistic update UI state, let polling sync actual state
 				}
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
-				// Reset UI to show error state
-				dialAction.setFeedback({ 
-					value: {
-						value: 0,
-						opacity: 0.5,
-					},
-					indicator: { 
-						value: 0,
-						opacity: 0.5
-					}
-				});
 			}
 		} catch (error) {
 			logger.error('Error in onDialRotate:', {
