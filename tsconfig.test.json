@@ -1,16 +1,18 @@
 {
 	"extends": "@tsconfig/node20/tsconfig.json",
 	"compilerOptions": {
+		"customConditions": [
+			"node"
+		],
 		"module": "ES2022",
-		"moduleResolution": "Node",
+		"moduleResolution": "Bundler",
 		"noImplicitOverride": true,
-		"outDir": "com.0xjessel.sonos-volume-dial.sdPlugin/bin"
+		"noImplicitAny": false
 	},
 	"include": [
-		"src/**/*.ts"
+		"scripts/**/*.ts"
 	],
 	"exclude": [
-		"node_modules",
-		"scripts"
+		"node_modules"
 	]
-}
+} 
