@@ -107,6 +107,7 @@ export class SonosVolumeDial extends SingletonAction {
 
 				// Only update if values have changed and we're not actively rotating
 				if ((volume !== this.lastKnownVolume || isMuted !== this.isMuted) && !this.isRotating) {
+					logger.debug('Speaker state changed externally - volume:', volume, 'muted:', isMuted);
 					this.lastKnownVolume = volume;
 					this.isMuted = isMuted;
 
@@ -271,9 +272,8 @@ export class SonosVolumeDial extends SingletonAction {
 		try {
 			const { speakerIp, value = this.lastKnownVolume, volumeStep = 5 } = ev.payload.settings;
 
-			// Mark that we're actively rotating and stop polling
+			// Mark that we're actively rotating
 			this.isRotating = true;
-			this.stopPolling();
 
 			// Update stored settings
 			this.currentSettings = ev.payload.settings;
@@ -329,23 +329,23 @@ export class SonosVolumeDial extends SingletonAction {
 						});
 						this.sonos = null;
 						this.showAlert(dialAction, 'Failed to update volume');
+					} finally {
+						// Clear rotating flag and restart polling only after the last debounced update
+						this.isRotating = false;
+						this.startPolling(dialAction);
 					}
 				}, SonosVolumeDial.VOLUME_CHANGE_DEBOUNCE_MS);
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
+				this.isRotating = false;
 			}
 		} catch (error) {
 			logger.error('Error in onDialRotate:', {
 				error: error instanceof Error ? error.message : String(error),
 				stack: error instanceof Error ? error.stack : undefined
 			});
-		} finally {
-			// Schedule clearing the rotating flag and restarting polling after the debounce period
-			setTimeout(() => {
-				this.isRotating = false;
-				this.startPolling(dialAction);
-			}, SonosVolumeDial.VOLUME_CHANGE_DEBOUNCE_MS);
+			this.isRotating = false;
 		}
 	}
 
