@@ -7,32 +7,58 @@ import { Sonos } from 'sonos';
  */
 @action({ UUID: 'com.0xjessel.sonos-volume-dial.volume' })
 export class SonosVolumeDial extends SingletonAction {
+	// Constants
+	private static readonly POLLING_INTERVAL_MS = 3000;
+	private static readonly VOLUME_CHANGE_DEBOUNCE_MS = 500;
+
 	private sonos: Sonos | null = null;
 	private lastKnownVolume: number = 50;
 	private isMuted: boolean = false;
 	private logger = streamDeck.logger.createScope('SonosVolumeDial');
 	private pollInterval: { active: boolean } | null = null;
+	private pollTimeoutId: NodeJS.Timeout | null = null;
 	private currentAction: DialAction<SonosVolumeDialSettings> | null = null;
 	private currentSettings: SonosVolumeDialSettings | null = null;
+	private volumeChangeTimeout: NodeJS.Timeout | null = null;
+	private isRotating: boolean = false;
 
 	/**
 	 * Start polling for speaker state
 	 */
 	private startPolling(dialAction: DialAction<SonosVolumeDialSettings>) {
-		// Clear any existing poll interval
+		// Create a scoped logger for polling
+		const logger = this.logger.createScope('Polling');
+
+		// Only start polling if there isn't already an active poll
+		if (this.pollInterval?.active) {
+			logger.debug('Polling already active, skipping');
+			return;
+		}
+
+		// Clear any existing poll interval just in case, but preserve state
 		if (this.pollInterval) {
 			this.pollInterval.active = false;
 			this.pollInterval = null;
 		}
 
+		// Clear any existing timeout
+		if (this.pollTimeoutId) {
+			clearTimeout(this.pollTimeoutId);
+			this.pollTimeoutId = null;
+		}
+
 		// Store the current action for use in the polling function
 		this.currentAction = dialAction;
 
-		// Create a scoped logger for polling
-		const logger = this.logger.createScope('Polling');
+		// Verify we have necessary state to start polling
+		if (!this.currentAction || !this.currentSettings) {
+			logger.debug('Missing required state, cannot start polling');
+			return;
+		}
 
-		// Start polling every 5 seconds using self-scheduling
+		// Start polling using self-scheduling
 		this.pollInterval = { active: true };
+		logger.debug('Starting polling');
 		this.pollWithDelay(logger);
 	}
 
@@ -45,13 +71,20 @@ export class SonosVolumeDial extends SingletonAction {
 	}
 
 	/**
-	 * Self-scheduling poll function that maintains consistent 5-second spacing
+	 * Self-scheduling poll function that maintains consistent spacing
 	 */
 	private async pollWithDelay(logger: ReturnType<typeof streamDeck.logger.createScope>) {
-		if (!this.pollInterval?.active) return;
+		// Ensure we're not running multiple polling cycles
+		if (!this.pollInterval?.active) {
+			return;
+		}
 
 		try {
-			if (!this.currentAction || !this.currentSettings) return;
+			if (!this.currentAction || !this.currentSettings) {
+				logger.debug('No current action or settings, stopping polling');
+				this.stopPolling();
+				return;
+			}
 
 			try {
 				// If we don't have a connection, try to reconnect
@@ -60,6 +93,8 @@ export class SonosVolumeDial extends SingletonAction {
 						logger.info('Reconnecting to speaker:', this.currentSettings.speakerIp);
 						this.sonos = new Sonos(this.currentSettings.speakerIp);
 					} else {
+						logger.debug('No speaker IP, stopping polling');
+						this.stopPolling();
 						return;
 					}
 				}
@@ -70,8 +105,8 @@ export class SonosVolumeDial extends SingletonAction {
 					this.sonos.getMuted()
 				]);
 
-				// Only update if values have changed
-				if (volume !== this.lastKnownVolume || isMuted !== this.isMuted) {
+				// Only update if values have changed and we're not actively rotating
+				if ((volume !== this.lastKnownVolume || isMuted !== this.isMuted) && !this.isRotating) {
 					this.lastKnownVolume = volume;
 					this.isMuted = isMuted;
 
@@ -99,7 +134,15 @@ export class SonosVolumeDial extends SingletonAction {
 		} finally {
 			// Schedule next poll only if polling is still active
 			if (this.pollInterval?.active) {
-				setTimeout(() => this.pollWithDelay(logger), 5000);
+				if (this.pollTimeoutId) {
+					clearTimeout(this.pollTimeoutId);
+				}
+				this.pollTimeoutId = setTimeout(() => {
+					this.pollTimeoutId = null;
+					if (this.pollInterval?.active) {
+						this.pollWithDelay(logger);
+					}
+				}, SonosVolumeDial.POLLING_INTERVAL_MS);
 			}
 		}
 	}
@@ -109,8 +152,13 @@ export class SonosVolumeDial extends SingletonAction {
 	 */
 	private stopPolling() {
 		if (this.pollInterval) {
+			this.logger.debug('Stopping polling');
 			this.pollInterval.active = false;
 			this.pollInterval = null;
+		}
+		if (this.pollTimeoutId) {
+			clearTimeout(this.pollTimeoutId);
+			this.pollTimeoutId = null;
 		}
 		this.currentAction = null;
 		this.currentSettings = null;
@@ -120,6 +168,10 @@ export class SonosVolumeDial extends SingletonAction {
 	 * Clean up when the action is removed
 	 */
 	override onWillDisappear(): void {
+		if (this.volumeChangeTimeout) {
+			clearTimeout(this.volumeChangeTimeout);
+			this.volumeChangeTimeout = null;
+		}
 		this.stopPolling();
 	}
 
@@ -137,10 +189,9 @@ export class SonosVolumeDial extends SingletonAction {
 			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
 			const { speakerIp, value = 50, volumeStep = 5 } = ev.payload.settings;
 
-			// Store current settings
+			// Store current settings and action first
+			this.currentAction = dialAction;
 			this.currentSettings = ev.payload.settings;
-
-			logger.debug('Initializing with settings:', { speakerIp, value, volumeStep });
 
 			// Initialize display with current or default value
 			dialAction.setFeedback({ 
@@ -181,11 +232,11 @@ export class SonosVolumeDial extends SingletonAction {
 						}
 					});
 
-					// Start polling for updates
-					this.startPolling(dialAction);
-
 					// Send settings back to Property Inspector with current volume
 					dialAction.setSettings({ speakerIp, volumeStep, value: volume });
+
+					// Start polling for updates only after we've successfully connected and initialized
+					this.startPolling(dialAction);
 				} catch (error) {
 					logger.error('Failed to connect to speaker:', {
 						error: error instanceof Error ? error.message : String(error),
@@ -215,10 +266,14 @@ export class SonosVolumeDial extends SingletonAction {
 	override async onDialRotate(ev: DialRotateEvent<SonosVolumeDialSettings>): Promise<void> {
 		// Create a scoped logger for this specific rotation event
 		const logger = this.logger.createScope('DialRotate');
+		const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
 		
 		try {
-			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
 			const { speakerIp, value = this.lastKnownVolume, volumeStep = 5 } = ev.payload.settings;
+
+			// Mark that we're actively rotating and stop polling
+			this.isRotating = true;
+			this.stopPolling();
 
 			// Update stored settings
 			this.currentSettings = ev.payload.settings;
@@ -242,79 +297,40 @@ export class SonosVolumeDial extends SingletonAction {
 			dialAction.setSettings({ ...this.currentSettings, value: newValue });
 			this.lastKnownVolume = newValue;
 
-			// If we have a speaker IP, update the speaker volume in the background
+			// Clear any pending volume change
+			if (this.volumeChangeTimeout) {
+				clearTimeout(this.volumeChangeTimeout);
+				this.volumeChangeTimeout = null;
+			}
+
+			// Handle Sonos operations in the background after debounce
 			if (speakerIp) {
-				// Initialize connection if needed
-				if (!this.sonos) {
-					logger.info('Reconnecting to speaker:', speakerIp);
-					this.sonos = new Sonos(speakerIp);
-					// Restart polling if it was stopped
-					if (!this.pollInterval) {
-						this.startPolling(dialAction);
-					}
-				}
-
-				try {
-					// If speaker is muted, unmute it first and verify
-					if (this.isMuted) {
-						await this.sonos.setMuted(false);
-						
-						// Verify unmute was successful
-						const isMuted = await this.sonos.getMuted();
-						if (isMuted) {
-							logger.error('Failed to unmute speaker');
-							this.showAlert(dialAction, 'Failed to unmute speaker');
-							this.isMuted = true;
-							// Update UI to reflect muted state
-							dialAction.setFeedback({ 
-								value: {
-									value: newValue,
-									opacity: 0.5,
-								},
-								indicator: { 
-									value: newValue,
-									opacity: 0.5
-								}
-							});
-							return;
+				this.volumeChangeTimeout = setTimeout(async () => {
+					try {
+						// Initialize connection if needed
+						if (!this.sonos) {
+							logger.info('Reconnecting to speaker:', speakerIp);
+							this.sonos = new Sonos(speakerIp);
 						}
-						
-						this.isMuted = false;
-					}
 
-					await this.sonos.setVolume(newValue);
+						// If speaker is muted, unmute it first
+						if (this.isMuted) {
+							await this.sonos.setMuted(false);
+							this.isMuted = false;
+						}
 
-					// Verify the volume was set correctly
-					const actualVolume = await this.sonos.getVolume();
-					if (actualVolume !== newValue) {
-						logger.warn('Volume mismatch:', {
-							expected: newValue,
-							actual: actualVolume
+						// Set the volume without waiting for verification
+						await this.sonos.setVolume(newValue);
+					} catch (error) {
+						logger.error('Failed to update volume:', {
+							error: error instanceof Error ? error.message : String(error),
+							stack: error instanceof Error ? error.stack : undefined,
+							targetVolume: newValue
 						});
-						this.showAlert(dialAction, 'Failed to set volume');
-						// Update UI to reflect actual volume since it differs from our optimistic update
-						dialAction.setFeedback({ 
-							value: {
-								value: actualVolume,
-								opacity: this.isMuted ? 0.5 : 1.0,
-							},
-							indicator: { 
-								value: actualVolume,
-								opacity: this.isMuted ? 0.5 : 1.0
-							}
-						});
-						dialAction.setSettings({ ...this.currentSettings, value: actualVolume });
-						this.lastKnownVolume = actualVolume;
+						this.sonos = null;
+						this.showAlert(dialAction, 'Failed to update volume');
 					}
-				} catch (error) {
-					logger.error('Failed to update volume:', {
-						error: error instanceof Error ? error.message : String(error),
-						stack: error instanceof Error ? error.stack : undefined
-					});
-					this.sonos = null;
-					this.showAlert(dialAction, 'Failed to update volume');
-					// Keep optimistic update UI state, let polling sync actual state
-				}
+				}, SonosVolumeDial.VOLUME_CHANGE_DEBOUNCE_MS);
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
@@ -324,6 +340,12 @@ export class SonosVolumeDial extends SingletonAction {
 				error: error instanceof Error ? error.message : String(error),
 				stack: error instanceof Error ? error.stack : undefined
 			});
+		} finally {
+			// Schedule clearing the rotating flag and restarting polling after the debounce period
+			setTimeout(() => {
+				this.isRotating = false;
+				this.startPolling(dialAction);
+			}, SonosVolumeDial.VOLUME_CHANGE_DEBOUNCE_MS);
 		}
 	}
 
@@ -338,53 +360,47 @@ export class SonosVolumeDial extends SingletonAction {
 			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
 			const { speakerIp } = ev.payload.settings;
 
-			// If we have a speaker IP, toggle mute state
+			// Update UI immediately with optimistic state
+			const newMutedState = !this.isMuted;
+			this.isMuted = newMutedState;
+			dialAction.setFeedback({ 
+				value: {
+					value: this.lastKnownVolume,
+					opacity: newMutedState ? 0.5 : 1.0,
+				},
+				indicator: { 
+					value: this.lastKnownVolume,
+					opacity: newMutedState ? 0.5 : 1.0
+				}
+			});
+
+			// Handle Sonos operations in the background
 			if (speakerIp) {
-				// Initialize connection if needed
-				if (!this.sonos) {
-					logger.info('Reconnecting to speaker:', speakerIp);
-					this.sonos = new Sonos(speakerIp);
-					// Restart polling if it was stopped
-					if (!this.pollInterval) {
-						this.startPolling(dialAction);
-					}
-				}
-
-				try {
-					// Toggle mute state
-					this.isMuted = !this.isMuted;
-					await this.sonos.setMuted(this.isMuted);
-
-					// Verify the mute state was set correctly
-					const actualMuted = await this.sonos.getMuted();
-					if (actualMuted !== this.isMuted) {
-						logger.warn('Mute state mismatch:', {
-							expected: this.isMuted,
-							actual: actualMuted
-						});
-						this.isMuted = actualMuted;
-						this.showAlert(dialAction, 'Failed to set mute state');
-					}
-
-					// Update UI to reflect mute state
-					dialAction.setFeedback({ 
-						value: {
-							value: this.lastKnownVolume,
-							opacity: this.isMuted ? 0.5 : 1.0,
-						},
-						indicator: { 
-							value: this.lastKnownVolume,
-							opacity: this.isMuted ? 0.5 : 1.0
+				Promise.resolve().then(async () => {
+					try {
+						// Initialize connection if needed
+						if (!this.sonos) {
+							logger.info('Reconnecting to speaker:', speakerIp);
+							this.sonos = new Sonos(speakerIp);
+							// Restart polling if it was stopped
+							if (!this.pollInterval) {
+								this.startPolling(dialAction);
+							}
 						}
-					});
-				} catch (error) {
-					logger.error('Failed to toggle mute:', {
-						error: error instanceof Error ? error.message : String(error),
-						stack: error instanceof Error ? error.stack : undefined
-					});
-					this.sonos = null;
-					this.showAlert(dialAction, 'Failed to toggle mute');
-				}
+
+						// Set mute state without waiting for verification
+						// Let the polling cycle handle any discrepancies
+						await this.sonos.setMuted(newMutedState);
+					} catch (error) {
+						logger.error('Failed to toggle mute:', {
+							error: error instanceof Error ? error.message : String(error),
+							stack: error instanceof Error ? error.stack : undefined
+						});
+						this.sonos = null;
+						this.showAlert(dialAction, 'Failed to toggle mute');
+						// Keep optimistic update UI state, let polling sync actual state
+					}
+				});
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
@@ -408,53 +424,47 @@ export class SonosVolumeDial extends SingletonAction {
 			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
 			const { speakerIp } = ev.payload.settings;
 
-			// If we have a speaker IP, toggle mute state
+			// Update UI immediately with optimistic state
+			const newMutedState = !this.isMuted;
+			this.isMuted = newMutedState;
+			dialAction.setFeedback({ 
+				value: {
+					value: this.lastKnownVolume,
+					opacity: newMutedState ? 0.5 : 1.0,
+				},
+				indicator: { 
+					value: this.lastKnownVolume,
+					opacity: newMutedState ? 0.5 : 1.0
+				}
+			});
+
+			// Handle Sonos operations in the background
 			if (speakerIp) {
-				// Initialize connection if needed
-				if (!this.sonos) {
-					logger.info('Reconnecting to speaker:', speakerIp);
-					this.sonos = new Sonos(speakerIp);
-					// Restart polling if it was stopped
-					if (!this.pollInterval) {
-						this.startPolling(dialAction);
-					}
-				}
-
-				try {
-					// Toggle mute state
-					this.isMuted = !this.isMuted;
-					await this.sonos.setMuted(this.isMuted);
-
-					// Verify the mute state was set correctly
-					const actualMuted = await this.sonos.getMuted();
-					if (actualMuted !== this.isMuted) {
-						logger.warn('Mute state mismatch:', {
-							expected: this.isMuted,
-							actual: actualMuted
-						});
-						this.isMuted = actualMuted;
-						this.showAlert(dialAction, 'Failed to set mute state');
-					}
-
-					// Update UI to reflect mute state
-					dialAction.setFeedback({ 
-						value: {
-							value: this.lastKnownVolume,
-							opacity: this.isMuted ? 0.5 : 1.0,
-						},
-						indicator: { 
-							value: this.lastKnownVolume,
-							opacity: this.isMuted ? 0.5 : 1.0
+				Promise.resolve().then(async () => {
+					try {
+						// Initialize connection if needed
+						if (!this.sonos) {
+							logger.info('Reconnecting to speaker:', speakerIp);
+							this.sonos = new Sonos(speakerIp);
+							// Restart polling if it was stopped
+							if (!this.pollInterval) {
+								this.startPolling(dialAction);
+							}
 						}
-					});
-				} catch (error) {
-					logger.error('Failed to toggle mute:', {
-						error: error instanceof Error ? error.message : String(error),
-						stack: error instanceof Error ? error.stack : undefined
-					});
-					this.sonos = null;
-					this.showAlert(dialAction, 'Failed to toggle mute');
-				}
+
+						// Set mute state without waiting for verification
+						// Let the polling cycle handle any discrepancies
+						await this.sonos.setMuted(newMutedState);
+					} catch (error) {
+						logger.error('Failed to toggle mute:', {
+							error: error instanceof Error ? error.message : String(error),
+							stack: error instanceof Error ? error.stack : undefined
+						});
+						this.sonos = null;
+						this.showAlert(dialAction, 'Failed to toggle mute');
+						// Keep optimistic update UI state, let polling sync actual state
+					}
+				});
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
