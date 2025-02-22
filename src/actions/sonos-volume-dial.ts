@@ -321,6 +321,7 @@ export class SonosVolumeDial extends SingletonAction {
 
 						// Set the volume without waiting for verification
 						await this.sonos.setVolume(newValue);
+						logger.debug('Volume successfully set to:', newValue);
 					} catch (error) {
 						logger.error('Failed to update volume:', {
 							error: error instanceof Error ? error.message : String(error),
