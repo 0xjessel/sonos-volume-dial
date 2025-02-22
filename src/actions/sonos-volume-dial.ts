@@ -31,7 +31,7 @@ export class SonosVolumeDial extends SingletonAction {
 		// Create a scoped logger for polling
 		const logger = this.logger.createScope('Polling');
 
-		// Start polling every 3 seconds using self-scheduling
+		// Start polling every 5 seconds using self-scheduling
 		this.pollInterval = { active: true };
 		this.pollWithDelay(logger);
 	}
@@ -45,7 +45,7 @@ export class SonosVolumeDial extends SingletonAction {
 	}
 
 	/**
-	 * Self-scheduling poll function that maintains consistent 2-second spacing
+	 * Self-scheduling poll function that maintains consistent 5-second spacing
 	 */
 	private async pollWithDelay(logger: ReturnType<typeof streamDeck.logger.createScope>) {
 		if (!this.pollInterval?.active) return;
@@ -99,7 +99,7 @@ export class SonosVolumeDial extends SingletonAction {
 		} finally {
 			// Schedule next poll only if polling is still active
 			if (this.pollInterval?.active) {
-				setTimeout(() => this.pollWithDelay(logger), 2000);
+				setTimeout(() => this.pollWithDelay(logger), 5000);
 			}
 		}
 	}
