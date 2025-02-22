@@ -6,9 +6,7 @@
 		],
 		"module": "ES2022",
 		"moduleResolution": "Bundler",
-		"noImplicitOverride": true,
-		"experimentalDecorators": false,
-		"emitDecoratorMetadata": false
+		"noImplicitOverride": true
 	},
 	"include": [
 		"src/**/*.ts"
