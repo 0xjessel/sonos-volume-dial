@@ -4,6 +4,10 @@ A Stream Deck+ plugin that lets you control your Sonos speaker's volume using th
 
 ![Stream Deck+ Sonos Volume Control](com.0xjessel.sonos-volume-dial.sdPlugin/imgs/plugin/icon.png)
 
+## Demo
+
+<img src="assets/demo.gif" alt="GIF demo" height="500px">
+
 ## Features
 
 - Control Sonos speaker volume using the Stream Deck+ dial
