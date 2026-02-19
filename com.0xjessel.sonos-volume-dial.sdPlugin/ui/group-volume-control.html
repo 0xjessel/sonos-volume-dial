@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <title>Sonos Group Volume Control Settings</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../libs/css/sdpi.css">
+    <style>
+        .sdpi-item-label {
+            color: white;
+        }
+        .sdpi-item-value {
+            color: white !important;
+        }
+        select.sdpi-item-value option {
+            background-color: #2D2D2D;
+            color: white;
+        }
+        .sdpi-item-value::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .error {
+            color: #f44336;
+        }
+        .invalid {
+            border-color: #f44336 !important;
+            border-width: 1px;
+        }
+        .info-tooltip {
+            font-size: 12px;
+            color: #999;
+            display: block;
+            clear: both;
+        }
+        .validation-message {
+            font-size: 12px;
+            color: #f44336;
+            display: none;
+            width: 100%;
+            clear: both;
+            margin: 4px 0;
+            padding-left: 96px;
+        }
+        input.sdpi-item-value, select.sdpi-item-value {
+            color: white !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sdpi-wrapper">
+        <!-- IP Addresses Input -->
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Speaker IPs</div>
+            <input class="sdpi-item-value" type="text" id="speakerIps" setting="speakerIps" placeholder="192.168.1.100:+5, 192.168.1.101:-3">
+        </div>
+        <div class="validation-message" id="ipValidationMessage">Please enter valid entries (e.g., 192.168.1.100:+5, 192.168.1.101:-3)</div>
+        <div class="sdpi-item">
+            <div class="spdi-item-value info-tooltip">Enter IPs separated by commas. Add optional volume offset per speaker with :offset (e.g., 192.168.1.100:+5, 192.168.1.101:-3). Offset defaults to 0.</div>
+        </div>
+
+        <!-- Volume Step Configuration -->
+        <div class="sdpi-item">
+            <div class="sdpi-item-label">Volume Step</div>
+            <select class="sdpi-item-value" id="volumeStep" setting="volumeStep">
+                <option value="1">1%</option>
+                <option value="2">2%</option>
+                <option value="5" selected>5%</option>
+                <option value="10">10%</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Stream Deck Property Inspector Library -->
+    <script src="../libs/js/property-inspector.js"></script>
+
+    <script>
+        let websocket = null;
+        let pluginAction = null;
+        let currentSettings = {};
+
+        function validateEntry(entry) {
+            // Accept "IP" or "IP:offset"
+            const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            const match = entry.match(/^(.+?)(?::([+-]?\d+))?$/);
+            if (!match) return false;
+            return ipRegex.test(match[1]);
+        }
+
+        function validateAllIPs(value) {
+            if (!value) return true;
+            const entries = value.split(',').map(e => e.trim()).filter(e => e.length > 0);
+            return entries.length > 0 && entries.every(validateEntry);
+        }
+
+        function showValidationMessage(show) {
+            const message = document.getElementById('ipValidationMessage');
+            const input = document.getElementById('speakerIps');
+
+            if (show) {
+                message.style.display = 'block';
+                input.classList.add('invalid');
+            } else {
+                message.style.display = 'none';
+                input.classList.remove('invalid');
+            }
+        }
+
+        window.connectElgatoStreamDeckSocket = function(inPort, inPluginUUID, inRegisterEvent, inInfo) {
+            pluginAction = inPluginUUID;
+
+            websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+            websocket.onopen = function() {
+                websocket.send(JSON.stringify({
+                    event: inRegisterEvent,
+                    uuid: inPluginUUID
+                }));
+
+                websocket.send(JSON.stringify({
+                    event: "getSettings",
+                    context: pluginAction
+                }));
+            };
+
+            websocket.onmessage = function(evt) {
+                const jsonObj = JSON.parse(evt.data);
+                const { event, payload } = jsonObj;
+
+                if (event === "didReceiveSettings") {
+                    currentSettings = payload.settings;
+                    updateUI(payload.settings);
+                }
+            };
+        }
+
+        function updateUI(settings) {
+            const ipsInput = document.getElementById("speakerIps");
+            if (settings.speakerIps !== undefined) {
+                ipsInput.value = settings.speakerIps;
+            }
+
+            const stepSelect = document.getElementById("volumeStep");
+            if (settings.volumeStep !== undefined) {
+                stepSelect.value = settings.volumeStep.toString();
+            }
+        }
+
+        function saveSettings() {
+            if (!websocket) return;
+
+            const speakerIps = document.getElementById("speakerIps").value;
+            const volumeStep = parseInt(document.getElementById("volumeStep").value);
+
+            if (speakerIps && !validateAllIPs(speakerIps)) {
+                showValidationMessage(true);
+                return;
+            }
+
+            showValidationMessage(false);
+
+            const settings = {
+                ...currentSettings,
+                speakerIps,
+                volumeStep
+            };
+
+            currentSettings = settings;
+
+            websocket.send(JSON.stringify({
+                event: "setSettings",
+                context: pluginAction,
+                payload: settings
+            }));
+        }
+
+        function validateInput(e) {
+            const value = e.target.value;
+            if (value && !validateAllIPs(value)) {
+                showValidationMessage(true);
+            } else {
+                showValidationMessage(false);
+            }
+        }
+
+        const speakerIpsInput = document.getElementById("speakerIps");
+        speakerIpsInput.addEventListener("input", (e) => {
+            validateInput(e);
+            saveSettings();
+        });
+        document.getElementById("volumeStep").addEventListener("change", saveSettings);
+    </script>
+</body>
+</html>

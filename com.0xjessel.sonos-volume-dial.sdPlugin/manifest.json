@@ -27,6 +27,29 @@
 					"Image": "imgs/actions/speaker.wave.3"
 				}
 			]
+		},
+		{
+			"Name": "Group Volume",
+			"UUID": "com.0xjessel.sonos-volume-dial.group-volume",
+			"Icon": "imgs/actions/speaker.wave.3",
+			"Tooltip": "Control multiple Sonos speakers simultaneously using the dial",
+			"PropertyInspectorPath": "ui/group-volume-control.html",
+			"Controllers": [
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "$B1",
+				"TriggerDescription": {
+					"Rotate": "Adjust Volume",
+					"Push": "Mute/Unmute",
+					"Touch": "Mute/Unmute"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/actions/speaker.wave.3"
+				}
+			]
 		}
 	],
 	"Category": "Sonos Volume Dial",
