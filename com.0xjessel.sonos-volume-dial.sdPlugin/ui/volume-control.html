@@ -1,79 +1,69 @@
 <!DOCTYPE html>
 <html>
+
 <head lang="en">
     <title>Sonos Volume Control Settings</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../libs/css/sdpi.css">
     <style>
-        /* Make labels white */
         .sdpi-item-label {
             color: white;
         }
 
-        /* Make input text white */
         .sdpi-item-value {
             color: white !important;
         }
 
-        /* Make select options white on dark background */
         select.sdpi-item-value option {
             background-color: #2D2D2D;
             color: white;
         }
 
-        /* Ensure input placeholder text is slightly dimmed */
         .sdpi-item-value::placeholder {
             color: rgba(255, 255, 255, 0.5);
         }
 
-        /* Error message styling */
-        .error {
-            color: #f44336;
+        input.sdpi-item-value,
+        select.sdpi-item-value {
+            color: white !important;
         }
 
-        /* Invalid input styling */
-        .invalid {
-            border-color: #f44336 !important;
-            border-width: 1px;
+        .refresh-btn {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-left: 8px;
         }
 
-        /* Info tooltip styling */
-        .info-tooltip {
+        .refresh-btn:hover {
+            background: #555;
+        }
+
+        .status-message {
             font-size: 12px;
             color: #999;
             display: block;
             clear: both;
-        }
-
-        /* Validation message styling */
-        .validation-message {
-            font-size: 12px;
-            color: #f44336;
-            display: none;
-            width: 100%;
-            clear: both;
-            margin: 4px 0;
             padding-left: 96px;
-        }
-
-        /* Ensure input text is white */
-        input.sdpi-item-value, select.sdpi-item-value {
-            color: white !important;
+            margin: 4px 0;
         }
     </style>
 </head>
 
 <body>
     <div class="sdpi-wrapper">
-        <!-- IP Address Input -->
+        <!-- Group Selection -->
         <div class="sdpi-item">
-            <div class="sdpi-item-label">Speaker IP</div>
-            <input class="sdpi-item-value" type="text" id="speakerIp" setting="speakerIp" placeholder="192.168.1.100" pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+            <div class="sdpi-item-label">Speaker Group</div>
+            <select class="sdpi-item-value" id="groupName">
+                <option value="">-- Select a group --</option>
+            </select>
+            <button class="refresh-btn" id="refreshBtn">↺</button>
         </div>
-        <div class="validation-message" id="ipValidationMessage">Please enter a valid IP address (e.g., 192.168.1.100)</div>
-        <div class="sdpi-item">
-            <div class="spdi-item-value info-tooltip">Go to your Sonos mobile app > Settings > General Settings > About Your System > Sonos System Info and find your speaker's IP address</div>
-        </div>
+        <div class="status-message" id="statusMessage">Loading groups...</div>
 
         <!-- Volume Step Configuration -->
         <div class="sdpi-item">
@@ -87,133 +77,113 @@
         </div>
     </div>
 
-    <!-- Stream Deck Property Inspector Library -->
     <script src="../libs/js/property-inspector.js"></script>
 
     <script>
-        // Load Stream Deck library
         let websocket = null;
         let pluginAction = null;
         let currentSettings = {};
+        let groupsLoaded = false;
 
-        function validateIPAddress(ip) {
-            // Regular expression for IP address validation
-            const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-            return ipRegex.test(ip);
+        function setStatus(message) {
+            document.getElementById('statusMessage').textContent = message;
         }
 
-        function showValidationMessage(show) {
-            const message = document.getElementById('ipValidationMessage');
-            const input = document.getElementById('speakerIp');
-            
-            if (show) {
-                message.style.display = 'block';
-                input.classList.add('invalid');
-            } else {
-                message.style.display = 'none';
-                input.classList.remove('invalid');
-            }
-        }
+        function populateGroups(groups, selectedGroup) {
+            const select = document.getElementById('groupName');
+            select.innerHTML = '<option value="">-- Select a group --</option>';
 
-        // Connect to Stream Deck
-        window.connectElgatoStreamDeckSocket = function(inPort, inPluginUUID, inRegisterEvent, inInfo) {
-            // Use the plugin UUID as the context for property inspector
-            pluginAction = inPluginUUID;
-            
-            websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-
-            websocket.onopen = function() {
-                // Register plugin with Stream Deck
-                const registerEvent = {
-                    event: inRegisterEvent,
-                    uuid: inPluginUUID
-                };
-                websocket.send(JSON.stringify(registerEvent));
-
-                // Request current settings
-                const getSettingsEvent = {
-                    event: "getSettings",
-                    context: pluginAction
-                };
-                websocket.send(JSON.stringify(getSettingsEvent));
-            };
-
-            websocket.onmessage = function(evt) {
-                const jsonObj = JSON.parse(evt.data);
-                const { event, payload } = jsonObj;
-
-                if (event === "didReceiveSettings") {
-                    currentSettings = payload.settings;
-                    updateUI(payload.settings);
-                }
-            };
-        }
-
-        // Update UI with settings
-        function updateUI(settings) {
-            // Update IP address input
-            const ipInput = document.getElementById("speakerIp");
-            if (settings.speakerIp !== undefined) {
-                ipInput.value = settings.speakerIp;
-            }
-
-            // Update volume step select
-            const stepSelect = document.getElementById("volumeStep");
-            if (settings.volumeStep !== undefined) {
-                stepSelect.value = settings.volumeStep.toString();
-            }
-        }
-
-        // Save settings when inputs change
-        function saveSettings() {
-            if (!websocket) return;
-
-            const speakerIp = document.getElementById("speakerIp").value;
-            const volumeStep = parseInt(document.getElementById("volumeStep").value);
-
-            // Don't save if IP is invalid, but still show validation message
-            if (speakerIp && !validateIPAddress(speakerIp)) {
-                showValidationMessage(true);
+            if (groups.length === 0) {
+                setStatus('No groups found. Make sure Sonos is on and try refreshing.');
                 return;
             }
 
-            showValidationMessage(false);
+            groups.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                if (name === selectedGroup) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
 
-            // Merge with current settings to preserve other values
-            const settings = {
-                ...currentSettings,
-                speakerIp,
-                volumeStep
-            };
+            setStatus(groups.length + ' group(s) found.');
+        }
 
-            // Update our local copy
-            currentSettings = settings;
-
-            // Send to Stream Deck
+        function requestGroups() {
+            if (!websocket) return;
+            setStatus('Discovering groups...');
             websocket.send(JSON.stringify({
-                event: "setSettings",
+                event: 'sendToPlugin',
+                context: pluginAction,
+                payload: { event: 'getGroups' }
+            }));
+        }
+
+        function updateUI(settings) {
+            if (settings.groupName) {
+                const select = document.getElementById('groupName');
+                // Set if option exists, otherwise it'll be set when groups load
+                for (let option of select.options) {
+                    if (option.value === settings.groupName) {
+                        select.value = settings.groupName;
+                        break;
+                    }
+                }
+            }
+            if (settings.volumeStep !== undefined) {
+                document.getElementById('volumeStep').value = settings.volumeStep.toString();
+            }
+        }
+
+        function saveSettings() {
+            if (!websocket) return;
+            const groupName = document.getElementById('groupName').value;
+            const volumeStep = parseInt(document.getElementById('volumeStep').value);
+            const settings = { ...currentSettings, groupName, volumeStep };
+            currentSettings = settings;
+            websocket.send(JSON.stringify({
+                event: 'setSettings',
                 context: pluginAction,
                 payload: settings
             }));
         }
 
-        // Validate IP address in real-time
-        function validateInput(e) {
-            const ip = e.target.value;
-            if (ip && !validateIPAddress(ip)) {
-                showValidationMessage(true);
-            } else {
-                showValidationMessage(false);
-            }
+        window.connectElgatoStreamDeckSocket = function (inPort, inPluginUUID, inRegisterEvent, inInfo) {
+            pluginAction = inPluginUUID;
+            websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+
+            websocket.onopen = function () {
+                websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPluginUUID }));
+                websocket.send(JSON.stringify({ event: 'getSettings', context: pluginAction }));
+            };
+
+            websocket.onmessage = function (evt) {
+                const jsonObj = JSON.parse(evt.data);
+                const { event, payload } = jsonObj;
+
+                if (event === 'didReceiveSettings') {
+                    currentSettings = payload.settings;
+                    updateUI(payload.settings);
+                    if (!groupsLoaded) {
+                        groupsLoaded = true;
+                        requestGroups();
+                    }
+                }
+
+                if (event === 'sendToPropertyInspector') {
+                    if (payload.event === 'groupList') {
+                        populateGroups(payload.groups, currentSettings.groupName);
+                    }
+                }
+            };
         }
 
-        // Add event listeners
-        const speakerIpInput = document.getElementById("speakerIp");
-        speakerIpInput.addEventListener("input", (e) => {
-            validateInput(e);
-            saveSettings();
-        });
-        document.getElementById("volumeStep").addEventListener("change", saveSettings);
+        document.getElementById('groupName').addEventListener('change', saveSettings);
+        document.getElementById('volumeStep').addEventListener('change', saveSettings);
+        document.getElementById('refreshBtn').addEventListener('click', requestGroups);
     </script>
 </body>
-</html> 
+
+</html>

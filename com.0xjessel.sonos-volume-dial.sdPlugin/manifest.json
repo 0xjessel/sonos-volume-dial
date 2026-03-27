@@ -15,11 +15,11 @@
 				"Encoder"
 			],
 			"Encoder": {
-				"layout": "$B1",
+				"layout": "layouts/track-info.json",
 				"TriggerDescription": {
 					"Rotate": "Adjust Volume",
-					"Push": "Mute/Unmute",
-					"Touch": "Mute/Unmute"
+					"Push": "Play/Pause",
+					"Touch": "Play/Pause"
 				}
 			},
 			"States": [

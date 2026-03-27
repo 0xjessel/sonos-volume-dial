@@ -1,0 +1,31 @@
+{
+    "$schema": "https://schemas.elgato.com/streamdeck/plugins/layout.json",
+    "id": "volume",
+    "items": [
+        {
+            "key": "albumArt",
+            "type": "pixmap",
+            "rect": [4, 20, 60, 60]
+        },
+        {
+            "key": "volumeNumber",
+            "type": "text",
+            "rect": [68, 15, 128, 50],
+            "font": { "size": 36, "weight": 700 },
+            "alignment": "center"
+        },
+        {
+            "key": "volumeLabel",
+            "type": "text",
+            "rect": [68, 68, 128, 14],
+            "font": { "size": 10, "weight": 400 },
+            "alignment": "center"
+        },
+        {
+            "key": "volumeBar",
+            "type": "bar",
+            "rect": [4, 88, 192, 8],
+            "bar_fill_c": "#1DB954"
+        }
+    ]
+}
