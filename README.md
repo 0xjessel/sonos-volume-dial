@@ -39,7 +39,7 @@ A Stream Deck+ plugin that lets you control your Sonos speaker's volume using th
 - **Rotate dial**: Adjust volume up/down
 - **Press dial**: Toggle mute
 - **Tap screen**: Toggle mute
-- Dimmed visuals indicate if speaker is muted
+- When muted, the icon shows a red strike and the level readout dims
 - Current volume level shown on dial
 
 ## Development

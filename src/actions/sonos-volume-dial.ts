@@ -123,16 +123,7 @@ export class SonosVolumeDial extends SingletonAction {
 					this.isMuted = isMuted;
 
 					// Update UI to reflect current state
-					this.currentAction.setFeedback({
-						value: {
-							value: volume,
-							opacity: isMuted ? 0.5 : 1.0,
-						},
-						indicator: {
-							value: volume,
-							opacity: isMuted ? 0.5 : 1.0
-						}
-					});
+					this.currentAction.setFeedback(this.feedbackFor(volume, isMuted));
 					this.currentAction.setSettings({ ...this.currentSettings, value: volume });
 				}
 			} catch (error) {
@@ -211,16 +202,7 @@ export class SonosVolumeDial extends SingletonAction {
 			this.applyTitle(dialAction, ev.payload.settings);
 
 			// Initialize display with current or default value
-			dialAction.setFeedback({ 
-				value: {
-					value,
-					opacity: this.isMuted ? 0.5 : 1.0
-				},
-				indicator: { 
-					value,
-					opacity: this.isMuted ? 0.5 : 1.0
-				},
-			});
+			dialAction.setFeedback(this.feedbackFor(value, this.isMuted));
 
 			// If we have a speaker IP, initialize the connection and update volume
 			if (speakerIp) {
@@ -238,16 +220,7 @@ export class SonosVolumeDial extends SingletonAction {
 					this.isMuted = isMuted;
 					
 					// Update UI with current state
-					dialAction.setFeedback({ 
-						value: {
-							value: volume,
-							opacity: isMuted ? 0.5 : 1.0,
-						},
-						indicator: { 
-							value: volume,
-							opacity: isMuted ? 0.5 : 1.0
-						}
-					});
+					dialAction.setFeedback(this.feedbackFor(volume, isMuted));
 
 					// Send settings back to Property Inspector with current volume
 					dialAction.setSettings({ speakerIp, volumeStep, value: volume });
@@ -307,16 +280,7 @@ export class SonosVolumeDial extends SingletonAction {
 			logger.debug('Tick:', ticks, 'from', value, 'to', newValue);
 
 			// Update UI immediately for responsiveness
-			dialAction.setFeedback({ 
-				value: {
-					value: newValue,
-					opacity: this.isMuted ? 0.5 : 1.0,
-				},
-				indicator: { 
-					value: newValue,
-					opacity: this.isMuted ? 0.5 : 1.0
-				}
-			});
+			dialAction.setFeedback(this.feedbackFor(newValue, this.isMuted));
 			dialAction.setSettings({ ...this.currentSettings, value: newValue });
 			this.lastKnownVolume = newValue;
 
@@ -341,6 +305,21 @@ export class SonosVolumeDial extends SingletonAction {
 			});
 			this.isRotating = false;
 		}
+	}
+
+	private static readonly ICON_LIVE = 'imgs/actions/speaker.live.svg';
+	private static readonly ICON_MUTED = 'imgs/actions/speaker.muted.svg';
+
+	/**
+	 * Touch-strip feedback for a given state: the icon swaps to a red-struck
+	 * speaker when muted, and the level readout and bar dim.
+	 */
+	private feedbackFor(volume: number, muted: boolean) {
+		return {
+			icon: muted ? SonosVolumeDial.ICON_MUTED : SonosVolumeDial.ICON_LIVE,
+			value: { value: volume, opacity: muted ? 0.5 : 1.0 },
+			indicator: { value: volume, opacity: muted ? 0.5 : 1.0 }
+		};
 	}
 
 	/**
@@ -518,16 +497,7 @@ export class SonosVolumeDial extends SingletonAction {
 			// Update UI immediately with optimistic state
 			const newMutedState = !this.isMuted;
 			this.isMuted = newMutedState;
-			dialAction.setFeedback({ 
-				value: {
-					value: this.lastKnownVolume,
-					opacity: newMutedState ? 0.5 : 1.0,
-				},
-				indicator: { 
-					value: this.lastKnownVolume,
-					opacity: newMutedState ? 0.5 : 1.0
-				}
-			});
+			dialAction.setFeedback(this.feedbackFor(this.lastKnownVolume, newMutedState));
 
 			// Handle Sonos operations in the background
 			if (speakerIp) {
@@ -583,16 +553,7 @@ export class SonosVolumeDial extends SingletonAction {
 			// Update UI immediately with optimistic state
 			const newMutedState = !this.isMuted;
 			this.isMuted = newMutedState;
-			dialAction.setFeedback({ 
-				value: {
-					value: this.lastKnownVolume,
-					opacity: newMutedState ? 0.5 : 1.0,
-				},
-				indicator: { 
-					value: this.lastKnownVolume,
-					opacity: newMutedState ? 0.5 : 1.0
-				}
-			});
+			dialAction.setFeedback(this.feedbackFor(this.lastKnownVolume, newMutedState));
 
 			// Handle Sonos operations in the background
 			if (speakerIp) {
@@ -672,16 +633,7 @@ export class SonosVolumeDial extends SingletonAction {
 						this.isMuted = isMuted;
 						
 						// Update UI with current state
-						dialAction.setFeedback({ 
-							value: {
-								value: volume,
-								opacity: isMuted ? 0.5 : 1.0,
-							},
-							indicator: { 
-								value: volume,
-								opacity: isMuted ? 0.5 : 1.0
-							}
-						});
+						dialAction.setFeedback(this.feedbackFor(volume, isMuted));
 						dialAction.setSettings({ ...ev.payload.settings, value: volume });
 
 						// Start polling for updates
