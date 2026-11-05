@@ -23,6 +23,7 @@ export class SonosVolumeDial extends SingletonAction {
 	private isRotating: boolean = false;
 	private lastWriteCompletedAt: number = 0;
 	private pendingVolume: number = 0;
+	private writeInFlight: boolean = false;
 
 	/**
 	 * Start polling for speaker state
@@ -306,51 +307,13 @@ export class SonosVolumeDial extends SingletonAction {
 
 			// Remember the latest requested value. Writes to the speaker are throttled:
 			// while the dial is turning, the newest value is written at most once per
-			// VOLUME_WRITE_INTERVAL_MS, and the final value is always written once the
-			// dial stops. This lets the volume be heard changing during a long turn
-			// instead of only after it ends.
+			// VOLUME_WRITE_INTERVAL_MS, only one write is ever in flight, and the final
+			// value is always written once the dial stops. This lets the volume be heard
+			// changing during a long turn instead of only after it ends.
 			this.pendingVolume = newValue;
 
 			if (speakerIp) {
-				if (!this.volumeChangeTimeout) {
-					this.volumeChangeTimeout = setTimeout(async () => {
-						this.volumeChangeTimeout = null;
-						const targetVolume = this.pendingVolume;
-						try {
-							// Initialize connection if needed
-							if (!this.sonos) {
-								logger.info('Reconnecting to speaker:', speakerIp);
-								this.sonos = new Sonos(speakerIp);
-							}
-
-							// If speaker is muted, unmute it first
-							if (this.isMuted) {
-								await this.sonos.setMuted(false);
-								this.isMuted = false;
-							}
-
-							// Set the volume without waiting for verification
-							await this.sonos.setVolume(targetVolume);
-							this.lastWriteCompletedAt = Date.now();
-							logger.debug('Volume successfully set to:', targetVolume);
-						} catch (error) {
-							logger.error('Failed to update volume:', {
-								error: error instanceof Error ? error.message : String(error),
-								stack: error instanceof Error ? error.stack : undefined,
-								targetVolume
-							});
-							this.sonos = null;
-							this.showAlert(dialAction, 'Failed to update volume');
-						} finally {
-							// If more ticks arrived during the write, the next interval is already
-							// scheduled; otherwise the turn is over.
-							if (!this.volumeChangeTimeout) {
-								this.isRotating = false;
-								this.startPolling(dialAction);
-							}
-						}
-					}, SonosVolumeDial.VOLUME_WRITE_INTERVAL_MS);
-				}
+				this.scheduleVolumeWrite(dialAction, speakerIp);
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
@@ -362,6 +325,68 @@ export class SonosVolumeDial extends SingletonAction {
 				stack: error instanceof Error ? error.stack : undefined
 			});
 			this.isRotating = false;
+		}
+	}
+
+	/**
+	 * Schedule a write of the latest pending volume, unless one is already
+	 * scheduled or in flight. The in-flight write drains any newer value when
+	 * it settles, so writes never overlap and the last value always wins.
+	 */
+	private scheduleVolumeWrite(dialAction: DialAction<SonosVolumeDialSettings>, speakerIp: string): void {
+		if (this.volumeChangeTimeout || this.writeInFlight) {
+			return;
+		}
+		this.volumeChangeTimeout = setTimeout(() => {
+			this.volumeChangeTimeout = null;
+			void this.writePendingVolume(dialAction, speakerIp);
+		}, SonosVolumeDial.VOLUME_WRITE_INTERVAL_MS);
+	}
+
+	/**
+	 * Write the latest pending volume to the speaker. Exactly one write runs at
+	 * a time; if the dial moved while this write was in flight, the newer value
+	 * is scheduled once this one settles.
+	 */
+	private async writePendingVolume(dialAction: DialAction<SonosVolumeDialSettings>, speakerIp: string): Promise<void> {
+		const logger = this.logger.createScope('VolumeWrite');
+		const targetVolume = this.pendingVolume;
+		this.writeInFlight = true;
+		try {
+			// Initialize connection if needed
+			if (!this.sonos) {
+				logger.info('Reconnecting to speaker:', speakerIp);
+				this.sonos = new Sonos(speakerIp);
+			}
+
+			// If speaker is muted, unmute it first
+			if (this.isMuted) {
+				await this.sonos.setMuted(false);
+				this.isMuted = false;
+			}
+
+			// Set the volume without waiting for verification
+			await this.sonos.setVolume(targetVolume);
+			this.lastWriteCompletedAt = Date.now();
+			logger.debug('Volume successfully set to:', targetVolume);
+		} catch (error) {
+			logger.error('Failed to update volume:', {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined,
+				targetVolume
+			});
+			this.sonos = null;
+			this.showAlert(dialAction, 'Failed to update volume');
+		} finally {
+			this.writeInFlight = false;
+			if (this.pendingVolume !== targetVolume) {
+				// The dial moved during the write: drain the newer value.
+				this.scheduleVolumeWrite(dialAction, speakerIp);
+			} else {
+				// The turn is over.
+				this.isRotating = false;
+				this.startPolling(dialAction);
+			}
 		}
 	}
 
