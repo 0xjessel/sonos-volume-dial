@@ -222,8 +222,9 @@ export class SonosVolumeDial extends SingletonAction {
 					// Update UI with current state
 					dialAction.setFeedback(this.feedbackFor(volume, isMuted));
 
-					// Send settings back to Property Inspector with current volume
-					dialAction.setSettings({ speakerIp, volumeStep, value: volume });
+					// Send settings back to Property Inspector with current volume, keeping
+					// everything else (room name included) intact
+					dialAction.setSettings({ ...ev.payload.settings, speakerIp, volumeStep, value: volume });
 
 					// Start polling for updates only after we've successfully connected and initialized
 					this.startPolling(dialAction);
@@ -235,12 +236,12 @@ export class SonosVolumeDial extends SingletonAction {
 					this.sonos = null;
 					this.showAlert(dialAction, 'Failed to connect to speaker');
 					// Even if connection fails, ensure settings are synced
-					dialAction.setSettings({ speakerIp, volumeStep, value });
+					dialAction.setSettings({ ...ev.payload.settings, speakerIp, volumeStep, value });
 				}
 			} else {
 				logger.warn('No speaker IP configured');
 				// Ensure settings are synced even when no IP is configured
-				dialAction.setSettings({ volumeStep, value });
+				dialAction.setSettings({ ...ev.payload.settings, volumeStep, value });
 			}
 
 			// If the speaker was chosen by room name, confirm its address in the background
@@ -380,6 +381,14 @@ export class SonosVolumeDial extends SingletonAction {
 
 		try {
 			const rooms = await this.discoverRooms();
+
+			// The user may have picked a different room, or an IP, while discovery ran.
+			// Only act on the result if the request still describes the current setup.
+			if (this.currentSettings?.roomName !== roomName || this.currentSettings?.speakerIp !== settings.speakerIp) {
+				logger.debug('Discarding stale room resolution for', roomName);
+				return;
+			}
+
 			const room = rooms.find((r) => r.name === roomName);
 			if (!room) {
 				logger.warn('Room not found on the network:', roomName);
@@ -390,7 +399,7 @@ export class SonosVolumeDial extends SingletonAction {
 				return;
 			}
 			logger.info('Room address changed:', roomName, settings.speakerIp, '->', room.host);
-			const updated = { ...settings, speakerIp: room.host };
+			const updated = { ...this.currentSettings, speakerIp: room.host };
 			this.currentSettings = updated;
 			this.sonos = new Sonos(room.host);
 			dialAction.setSettings(updated);
@@ -614,9 +623,12 @@ export class SonosVolumeDial extends SingletonAction {
 
 			// If speaker IP changed, we need to reconnect
 			if (speakerIp !== previousSettings?.speakerIp) {
-				// Clear existing connection
+				// Clear existing connection. stopPolling() also clears the stored
+				// action and settings, so put the new ones back before reconnecting.
 				this.sonos = null;
 				this.stopPolling();
+				this.currentAction = dialAction;
+				this.currentSettings = ev.payload.settings;
 
 				if (speakerIp) {
 					logger.info('Connecting to new speaker:', speakerIp);
