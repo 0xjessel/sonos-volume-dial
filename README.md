@@ -14,6 +14,7 @@ A Stream Deck+ plugin that lets you control your Sonos speaker's volume using th
 - Mute/unmute by pressing the dial or tapping the touch screen
 - Configure volume step size (1%, 2%, 5%, or 10%)
 - Real-time volume indicator on the touchscreen display
+- Volume changes reach the speaker while the dial is still turning (throttled to one write per 120 ms)
 - Works with any Sonos speaker on your local network
 
 ## Requirements

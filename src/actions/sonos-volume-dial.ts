@@ -9,7 +9,7 @@ import { Sonos } from 'sonos';
 export class SonosVolumeDial extends SingletonAction {
 	// Constants
 	private static readonly POLLING_INTERVAL_MS = 3000;
-	private static readonly VOLUME_CHANGE_DEBOUNCE_MS = 500;
+	private static readonly VOLUME_WRITE_INTERVAL_MS = 120;
 
 	private sonos: Sonos | null = null;
 	private lastKnownVolume: number = 50;
@@ -21,6 +21,8 @@ export class SonosVolumeDial extends SingletonAction {
 	private currentSettings: SonosVolumeDialSettings | null = null;
 	private volumeChangeTimeout: NodeJS.Timeout | null = null;
 	private isRotating: boolean = false;
+	private lastWriteCompletedAt: number = 0;
+	private pendingVolume: number = 0;
 
 	/**
 	 * Start polling for speaker state
@@ -100,13 +102,17 @@ export class SonosVolumeDial extends SingletonAction {
 				}
 
 				// Get current volume and mute state
+				const pollStartedAt = Date.now();
 				const [volume, isMuted] = await Promise.all([
 					this.sonos.getVolume(),
 					this.sonos.getMuted()
 				]);
 
-				// Only update if values have changed and we're not actively rotating
-				if ((volume !== this.lastKnownVolume || isMuted !== this.isMuted) && !this.isRotating) {
+				// Discard this reading if a write to the speaker completed after the poll started:
+				// it is stale and would overwrite the value just written.
+				if (this.lastWriteCompletedAt > pollStartedAt) {
+					logger.debug('Discarding poll reading that raced a write');
+				} else if ((volume !== this.lastKnownVolume || isMuted !== this.isMuted) && !this.isRotating) {
 					logger.debug('Speaker state changed externally - volume:', volume, 'muted:', isMuted);
 					this.lastKnownVolume = volume;
 					this.isMuted = isMuted;
@@ -282,6 +288,7 @@ export class SonosVolumeDial extends SingletonAction {
 
 			// Calculate new value using the volumeStep setting
 			const newValue = Math.max(0, Math.min(100, value + (ticks * volumeStep)));
+			logger.debug('Tick:', ticks, 'from', value, 'to', newValue);
 
 			// Update UI immediately for responsiveness
 			dialAction.setFeedback({ 
@@ -297,45 +304,53 @@ export class SonosVolumeDial extends SingletonAction {
 			dialAction.setSettings({ ...this.currentSettings, value: newValue });
 			this.lastKnownVolume = newValue;
 
-			// Clear any pending volume change
-			if (this.volumeChangeTimeout) {
-				clearTimeout(this.volumeChangeTimeout);
-				this.volumeChangeTimeout = null;
-			}
+			// Remember the latest requested value. Writes to the speaker are throttled:
+			// while the dial is turning, the newest value is written at most once per
+			// VOLUME_WRITE_INTERVAL_MS, and the final value is always written once the
+			// dial stops. This lets the volume be heard changing during a long turn
+			// instead of only after it ends.
+			this.pendingVolume = newValue;
 
-			// Handle Sonos operations in the background after debounce
 			if (speakerIp) {
-				this.volumeChangeTimeout = setTimeout(async () => {
-					try {
-						// Initialize connection if needed
-						if (!this.sonos) {
-							logger.info('Reconnecting to speaker:', speakerIp);
-							this.sonos = new Sonos(speakerIp);
-						}
+				if (!this.volumeChangeTimeout) {
+					this.volumeChangeTimeout = setTimeout(async () => {
+						this.volumeChangeTimeout = null;
+						const targetVolume = this.pendingVolume;
+						try {
+							// Initialize connection if needed
+							if (!this.sonos) {
+								logger.info('Reconnecting to speaker:', speakerIp);
+								this.sonos = new Sonos(speakerIp);
+							}
 
-						// If speaker is muted, unmute it first
-						if (this.isMuted) {
-							await this.sonos.setMuted(false);
-							this.isMuted = false;
-						}
+							// If speaker is muted, unmute it first
+							if (this.isMuted) {
+								await this.sonos.setMuted(false);
+								this.isMuted = false;
+							}
 
-						// Set the volume without waiting for verification
-						await this.sonos.setVolume(newValue);
-						logger.debug('Volume successfully set to:', newValue);
-					} catch (error) {
-						logger.error('Failed to update volume:', {
-							error: error instanceof Error ? error.message : String(error),
-							stack: error instanceof Error ? error.stack : undefined,
-							targetVolume: newValue
-						});
-						this.sonos = null;
-						this.showAlert(dialAction, 'Failed to update volume');
-					} finally {
-						// Clear rotating flag and restart polling only after the last debounced update
-						this.isRotating = false;
-						this.startPolling(dialAction);
-					}
-				}, SonosVolumeDial.VOLUME_CHANGE_DEBOUNCE_MS);
+							// Set the volume without waiting for verification
+							await this.sonos.setVolume(targetVolume);
+							this.lastWriteCompletedAt = Date.now();
+							logger.debug('Volume successfully set to:', targetVolume);
+						} catch (error) {
+							logger.error('Failed to update volume:', {
+								error: error instanceof Error ? error.message : String(error),
+								stack: error instanceof Error ? error.stack : undefined,
+								targetVolume
+							});
+							this.sonos = null;
+							this.showAlert(dialAction, 'Failed to update volume');
+						} finally {
+							// If more ticks arrived during the write, the next interval is already
+							// scheduled; otherwise the turn is over.
+							if (!this.volumeChangeTimeout) {
+								this.isRotating = false;
+								this.startPolling(dialAction);
+							}
+						}
+					}, SonosVolumeDial.VOLUME_WRITE_INTERVAL_MS);
+				}
 			} else {
 				logger.warn('No speaker IP configured');
 				this.showAlert(dialAction, 'No speaker IP configured');
@@ -392,6 +407,7 @@ export class SonosVolumeDial extends SingletonAction {
 						// Set mute state without waiting for verification
 						// Let the polling cycle handle any discrepancies
 						await this.sonos.setMuted(newMutedState);
+						this.lastWriteCompletedAt = Date.now();
 					} catch (error) {
 						logger.error('Failed to toggle mute:', {
 							error: error instanceof Error ? error.message : String(error),
@@ -456,6 +472,7 @@ export class SonosVolumeDial extends SingletonAction {
 						// Set mute state without waiting for verification
 						// Let the polling cycle handle any discrepancies
 						await this.sonos.setMuted(newMutedState);
+						this.lastWriteCompletedAt = Date.now();
 					} catch (error) {
 						logger.error('Failed to toggle mute:', {
 							error: error instanceof Error ? error.message : String(error),
