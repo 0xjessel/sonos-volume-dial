@@ -308,7 +308,7 @@ export class SonosVolumeDial extends SingletonAction {
 		}
 	}
 
-	private static readonly ICON_LIVE = 'imgs/actions/speaker.live.svg';
+	private static readonly ICON_LIVE = 'imgs/actions/speaker.wave.3.png';
 	private static readonly ICON_MUTED = 'imgs/actions/speaker.muted.svg';
 
 	/**
