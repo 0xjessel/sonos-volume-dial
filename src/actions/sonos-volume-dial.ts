@@ -1,6 +1,6 @@
-import { action, DialAction, DialRotateEvent, SingletonAction, WillAppearEvent, DialUpEvent, TouchTapEvent, DidReceiveSettingsEvent } from '@elgato/streamdeck';
+import { action, DialAction, DialRotateEvent, SingletonAction, WillAppearEvent, DialUpEvent, TouchTapEvent, DidReceiveSettingsEvent, SendToPluginEvent, TitleParametersDidChangeEvent, JsonValue } from '@elgato/streamdeck';
 import streamDeck from '@elgato/streamdeck';
-import { Sonos } from 'sonos';
+import { Sonos, AsyncDeviceDiscovery } from 'sonos';
 
 /**
  * Sonos Volume Dial action that controls a Sonos speaker's volume.
@@ -10,6 +10,8 @@ export class SonosVolumeDial extends SingletonAction {
 	// Constants
 	private static readonly POLLING_INTERVAL_MS = 3000;
 	private static readonly VOLUME_WRITE_INTERVAL_MS = 120;
+	private static readonly DISCOVERY_TIMEOUT_MS = 4000;
+	private static readonly RERESOLVE_MIN_INTERVAL_MS = 30000;
 
 	private sonos: Sonos | null = null;
 	private lastKnownVolume: number = 50;
@@ -24,6 +26,8 @@ export class SonosVolumeDial extends SingletonAction {
 	private lastWriteCompletedAt: number = 0;
 	private pendingVolume: number = 0;
 	private writeInFlight: boolean = false;
+	private lastReResolveAt: number = 0;
+	private userTitle: string | null = null;
 
 	/**
 	 * Start polling for speaker state
@@ -138,6 +142,10 @@ export class SonosVolumeDial extends SingletonAction {
 				});
 				// Don't stop polling on error, just clear the connection so we'll try to reconnect next time
 				this.sonos = null;
+				// If the speaker was chosen by room name, its address may have changed: re-resolve it.
+				if (this.currentAction && this.currentSettings?.roomName) {
+					void this.resolveRoom(this.currentAction, this.currentSettings, false);
+				}
 			}
 		} finally {
 			// Schedule next poll only if polling is still active
@@ -200,6 +208,7 @@ export class SonosVolumeDial extends SingletonAction {
 			// Store current settings and action first
 			this.currentAction = dialAction;
 			this.currentSettings = ev.payload.settings;
+			this.applyTitle(dialAction, ev.payload.settings);
 
 			// Initialize display with current or default value
 			dialAction.setFeedback({ 
@@ -259,6 +268,12 @@ export class SonosVolumeDial extends SingletonAction {
 				logger.warn('No speaker IP configured');
 				// Ensure settings are synced even when no IP is configured
 				dialAction.setSettings({ volumeStep, value });
+			}
+
+			// If the speaker was chosen by room name, confirm its address in the background
+			// so a DHCP change heals itself without the user touching the settings.
+			if (ev.payload.settings.roomName) {
+				void this.resolveRoom(dialAction, ev.payload.settings, true);
 			}
 		} catch (error) {
 			logger.error('Error in onWillAppear:', {
@@ -325,6 +340,105 @@ export class SonosVolumeDial extends SingletonAction {
 				stack: error instanceof Error ? error.stack : undefined
 			});
 			this.isRotating = false;
+		}
+	}
+
+	/**
+	 * Show which speaker this dial controls on the touch strip. A title typed
+	 * into the Stream Deck app's Title field overrides it; otherwise the room
+	 * name when chosen via discovery, otherwise the IP, otherwise a placeholder.
+	 */
+	private applyTitle(dialAction: DialAction<SonosVolumeDialSettings>, settings: SonosVolumeDialSettings): void {
+		dialAction.setFeedback({ title: this.userTitle ?? settings.roomName ?? settings.speakerIp ?? 'Sonos' });
+	}
+
+	/**
+	 * The user edited the Title field in the Stream Deck app. Blank means
+	 * "use the room name".
+	 */
+	override onTitleParametersDidChange(ev: TitleParametersDidChangeEvent<SonosVolumeDialSettings>): void {
+		if (!ev.action.isDial()) return;
+		const title = ev.payload.title.trim();
+		this.userTitle = title.length > 0 ? title : null;
+		this.applyTitle(ev.action as DialAction<SonosVolumeDialSettings>, ev.payload.settings);
+	}
+
+	/**
+	 * Find Sonos rooms on the local network via SSDP. Returns one entry per
+	 * group, named after the group's coordinator, with the coordinator's IP.
+	 * Bonded surrounds and subs are not listed separately, which is what we
+	 * want: volume is set on the coordinator.
+	 */
+	private async discoverRooms(): Promise<DiscoveredRoom[]> {
+		const discovery = new AsyncDeviceDiscovery();
+		const device = await discovery.discover({ timeout: SonosVolumeDial.DISCOVERY_TIMEOUT_MS });
+		const groups = await device.getAllGroups();
+		const rooms = new Map<string, DiscoveredRoom>();
+		for (const group of groups) {
+			if (!group.host) continue;
+			const coordinator = group.ZoneGroupMember.find((member) => member.UUID === group.Coordinator);
+			const name = coordinator?.ZoneName ?? group.Name;
+			if (!rooms.has(name)) {
+				rooms.set(name, { name, host: group.host });
+			}
+		}
+		return [...rooms.values()].sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Re-resolve a room name to its current IP and reconnect if it moved.
+	 * `force` bypasses the rate limit (used on appear); otherwise attempts are
+	 * spaced at least RERESOLVE_MIN_INTERVAL_MS apart so a dead network does
+	 * not trigger a discovery on every failed poll.
+	 */
+	private async resolveRoom(dialAction: DialAction<SonosVolumeDialSettings>, settings: SonosVolumeDialSettings, force: boolean): Promise<void> {
+		const logger = this.logger.createScope('ResolveRoom');
+		const { roomName } = settings;
+		if (!roomName) return;
+		const now = Date.now();
+		if (!force && now - this.lastReResolveAt < SonosVolumeDial.RERESOLVE_MIN_INTERVAL_MS) return;
+		this.lastReResolveAt = now;
+
+		try {
+			const rooms = await this.discoverRooms();
+			const room = rooms.find((r) => r.name === roomName);
+			if (!room) {
+				logger.warn('Room not found on the network:', roomName);
+				return;
+			}
+			if (room.host === settings.speakerIp) {
+				logger.debug('Room address unchanged:', roomName, room.host);
+				return;
+			}
+			logger.info('Room address changed:', roomName, settings.speakerIp, '->', room.host);
+			const updated = { ...settings, speakerIp: room.host };
+			this.currentSettings = updated;
+			this.sonos = new Sonos(room.host);
+			dialAction.setSettings(updated);
+			this.startPolling(dialAction);
+		} catch (error) {
+			logger.warn('Discovery failed while re-resolving room:', {
+				error: error instanceof Error ? error.message : String(error)
+			});
+		}
+	}
+
+	/**
+	 * Messages from the property inspector. Currently only room discovery.
+	 */
+	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, SonosVolumeDialSettings>): Promise<void> {
+		const logger = this.logger.createScope('SendToPlugin');
+		const payload = ev.payload as { event?: string } | null;
+		if (payload?.event !== 'discoverRooms') return;
+
+		try {
+			const rooms = await this.discoverRooms();
+			logger.info('Discovered rooms:', rooms.map((r) => `${r.name}=${r.host}`).join(', '));
+			await streamDeck.ui.current?.sendToPropertyInspector({ event: 'rooms', rooms });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			logger.warn('Discovery failed:', message);
+			await streamDeck.ui.current?.sendToPropertyInspector({ event: 'discoveryFailed', message });
 		}
 	}
 
@@ -532,11 +646,13 @@ export class SonosVolumeDial extends SingletonAction {
 			const dialAction = ev.action as DialAction<SonosVolumeDialSettings>;
 			const { speakerIp, value = this.lastKnownVolume, volumeStep = 5 } = ev.payload.settings;
 
-			// Store current settings
+			// Store current settings, keeping the previous ones for comparison
+			const previousSettings = this.currentSettings;
 			this.currentSettings = ev.payload.settings;
+			this.applyTitle(dialAction, ev.payload.settings);
 
 			// If speaker IP changed, we need to reconnect
-			if (speakerIp !== this.currentSettings?.speakerIp) {
+			if (speakerIp !== previousSettings?.speakerIp) {
 				// Clear existing connection
 				this.sonos = null;
 				this.stopPolling();
@@ -595,5 +711,12 @@ export class SonosVolumeDial extends SingletonAction {
 type SonosVolumeDialSettings = {
 	value: number;
 	speakerIp?: string;
+	/** Room name chosen via discovery; used to re-resolve the IP if it changes. Absent for a manually entered IP. */
+	roomName?: string;
 	volumeStep: number;
+};
+
+type DiscoveredRoom = {
+	name: string;
+	host: string;
 };

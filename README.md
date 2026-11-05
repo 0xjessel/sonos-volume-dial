@@ -15,7 +15,8 @@ A Stream Deck+ plugin that lets you control your Sonos speaker's volume using th
 - Configure volume step size (1%, 2%, 5%, or 10%)
 - Real-time volume indicator on the touchscreen display
 - Volume changes reach the speaker while the dial is still turning (throttled to one write per 120 ms)
-- Works with any Sonos speaker on your local network
+- Finds your Sonos rooms automatically (SSDP) and re-resolves the speaker's address if it changes
+- Works with any Sonos speaker on your local network; a manual IP still works too
 
 ## Requirements
 
@@ -28,13 +29,10 @@ A Stream Deck+ plugin that lets you control your Sonos speaker's volume using th
 
 1. Download the latest release from the [releases page](https://github.com/0xjessel/sonos-volume-dial/releases)
 2. Double-click the `.streamDeckPlugin` file to install
-3. Find your Sonos speaker's IP address:
-   - Open the Sonos app
-   - Go to Settings > General Settings > About Your System
-   - Find your speaker in the list and note its IP address
-4. Add the Sonos Volume Dial action to your Stream Deck+
-5. Enter your speaker's IP address in the action settings
-6. Optionally adjust the volume step size (default: 5%)
+3. Add the Sonos Volume Dial action to your Stream Deck+
+4. In the action settings, click **Find Sonos speakers** and pick your room. The speaker's IP is filled in for you and re-checked whenever the action loads, so it keeps working if the address changes.
+   - Prefer a fixed address? Type it into **Speaker IP** instead. You can find it in the Sonos app under Settings > General Settings > About Your System.
+5. Optionally adjust the volume step size (default: 5%)
 
 ## Usage
 
