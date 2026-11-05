@@ -113,7 +113,9 @@
         let manualMode = false;
 
         function setDiscoverStatus(text) {
-            document.getElementById('discoverStatus').textContent = text;
+            const el = document.getElementById('discoverStatus');
+            el.textContent = text;
+            el.parentElement.style.display = text ? '' : 'none';
         }
 
         function showManualIp(show) {
@@ -182,10 +184,8 @@
             renderRoomSelect();
             if (rooms.length === 0) {
                 setDiscoverStatus('No Sonos rooms found. Check the speakers are on the same network, then choose "Search again".');
-            } else if (isManualSetting(currentSettings)) {
-                setDiscoverStatus('Using the address below. Pick a room to switch to discovery.');
-            } else if (currentSettings.roomName) {
-                setDiscoverStatus('Controlling ' + currentSettings.roomName + ' at ' + currentSettings.speakerIp + '. The address is re-checked automatically.');
+            } else if (isManualSetting(currentSettings) || currentSettings.roomName) {
+                setDiscoverStatus('');
             } else {
                 setDiscoverStatus(rooms.length + ' room' + (rooms.length === 1 ? '' : 's') + ' found. Pick one to control it.');
             }
@@ -345,8 +345,7 @@
             document.getElementById("speakerIp").value = value;
             showValidationMessage(false);
             saveSettings();
-            const room = discoveredRooms.find((r) => r.host === value);
-            if (room) setDiscoverStatus('Controlling ' + room.name + ' at ' + room.host + '. The address is re-checked automatically.');
+            setDiscoverStatus('');
         });
     </script>
 </body>
